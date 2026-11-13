@@ -33,6 +33,13 @@ for b in ("agy-tree", "agy-turbo", "agy-effortless", "agy-turbo-setup", "agy-tur
     p = os.path.join(HOME, ".local/bin", b)
     if os.path.islink(p):
         os.remove(p)
+tmux_w = os.path.join(HOME, ".local/bin/tmux")
+if os.path.isfile(tmux_w) and not os.path.islink(tmux_w):
+    try:
+        if ".local/share/agy-turbo/sysroot" in open(tmux_w, errors="ignore").read():
+            os.remove(tmux_w)
+    except OSError:
+        pass
 try:
     os.remove(os.path.join(DATA, "bootstrap.json"))
 except OSError:

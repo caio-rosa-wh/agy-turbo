@@ -7,6 +7,9 @@ ROOT = os.environ.get("PLUGIN_ROOT") or os.path.dirname(os.path.dirname(os.path.
 DATA = (os.environ.get("PLUGIN_DATA") or os.environ.get("AGY_TURBO_DATA")
         or os.path.expanduser("~/.gemini/antigravity-cli/plugin_data/agy-turbo"))
 LEVELS = ["low", "medium", "high", "xhigh", "max"]
+_LOCAL_BIN = os.path.expanduser("~/.local/bin")
+if _LOCAL_BIN not in os.environ.get("PATH", "").split(os.pathsep):
+    os.environ["PATH"] = _LOCAL_BIN + os.pathsep + os.environ.get("PATH", "")
 
 
 def nested_judge() -> bool:

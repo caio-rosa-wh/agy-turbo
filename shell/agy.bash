@@ -17,7 +17,7 @@ agy() {
     esac
   done
   # primeira vez sem tmux (ou sem venv): oferece instalar, uma vez por dia
-  if ! command -v tmux >/dev/null 2>&1; then
+  if ! command -v tmux >/dev/null 2>&1 || { [ "${AGY_TURBO_TREE:-1}" != "0" ] && [ ! -x "${AGY_TURBO_VENV:-$HOME/.local/share/agy-turbo/venv}/bin/python" ]; }; then
     local stamp="$HOME/.local/share/agy-turbo/.setup-asked"
     if [ ! -f "$stamp" ] || [ -n "$(find "$stamp" -mmin +1440 2>/dev/null)" ]; then
       mkdir -p "${stamp%/*}" && touch "$stamp"

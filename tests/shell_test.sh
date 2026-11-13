@@ -16,4 +16,6 @@ o=$(run 'agy'); [ "$o" = $'SETUP\nBIN ' ] || { echo "FAIL sem tmux 1ª vez: $o";
 o=$(run 'agy'); [ "$o" = "BIN " ] || { echo "FAIL sem tmux 2ª vez (não deve perguntar de novo): $o"; fail=1; }
 ln -s "$(command -v tmux || echo /bin/true)" "$T/bin/tmux"
 [ "$(run 'agy --model x')" = "TURBO --model x" ] || { echo "FAIL com tmux"; fail=1; }
+rm -f "$T/home/.local/share/agy-turbo/.setup-asked"
+o=$(run 'agy --model x'); [ "$o" = $'SETUP\nTURBO --model x' ] || { echo "FAIL sem venv 1ª vez: $o"; fail=1; }
 exit $fail

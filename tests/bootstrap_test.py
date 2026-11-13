@@ -16,5 +16,5 @@ rc = open(os.path.join(home, ".bashrc")).read()
 assert rc.count("# >>> agy-turbo >>>") == 1 and os.path.join(root, "shell", "agy.bash") in rc
 assert os.path.islink(os.path.join(home, ".local", "bin", "agy-tree"))
 st = json.load(open(os.path.join(home, "data", "bootstrap.json")))
-assert st["version"] and st["running_since"] == 0
+assert st["version"] and st["running_since"] == 0 and st["ok"]
 print("ok")
