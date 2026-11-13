@@ -1,37 +1,43 @@
 #!/usr/bin/env bash
-# Instala o que o agy-turbo precisa do sistema (tmux e venv do Python), perguntando antes, e refaz a configuração.
-# Roda sozinho na primeira vez que você usa "agy" num terminal sem essas dependências; pode rodar à mão.
+# Instala o que o agy-turbo precisa do sistema (tmux e venv do Python), tentando primeiro em modo usuário (sem sudo)
+# e perguntando antes se precisar do gerenciador do sistema; depois refaz a configuração.
 set -uo pipefail
+case ":$PATH:" in *":$HOME/.local/bin:"*) ;; *) export PATH="$HOME/.local/bin:$PATH" ;; esac
 ROOT=$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)
 DATA=${AGY_TURBO_DATA:-$HOME/.gemini/antigravity-cli/plugin_data/agy-turbo}
+VENV_PY=${AGY_TURBO_VENV:-$HOME/.local/share/agy-turbo/venv}/bin/python
+# 1ª tentativa: bootstrap em modo usuário (venv --without-pip + pip.pyz e apt-get download tmux sem sudo)
+rm -f "$DATA/bootstrap.json"
+PLUGIN_ROOT=$ROOT PLUGIN_DATA=$DATA python3 -I "$ROOT/hooks/bootstrap.py"
 need=()
 command -v tmux >/dev/null 2>&1 || need+=(tmux)
-venv_ok() { [ -x "${AGY_TURBO_VENV:-$HOME/.local/share/agy-turbo/venv}/bin/python" ] || python3 -c 'import ensurepip, venv' 2>/dev/null; }
+venv_ok() { [ -x "$VENV_PY" ] || python3 -c 'import ensurepip, venv' 2>/dev/null; }
 venv_ok || need+=(venv)
 if [ ${#need[@]} -eq 0 ]; then
+  tail -n 6 "$DATA/bootstrap.log" 2>/dev/null || true
   echo "agy-turbo: dependências ok."
-else
-  if command -v apt-get >/dev/null; then pm="apt-get install -y"; map_tmux=tmux; map_venv=python3-venv
-  elif command -v dnf >/dev/null; then pm="dnf install -y"; map_tmux=tmux; map_venv=python3
-  elif command -v pacman >/dev/null; then pm="pacman -S --noconfirm --needed"; map_tmux=tmux; map_venv=python
-  elif command -v zypper >/dev/null; then pm="zypper install -y"; map_tmux=tmux; map_venv=python3
-  elif command -v brew >/dev/null; then pm="brew install"; map_tmux=tmux; map_venv=python
-  else pm=""; fi
-  pkgs=()
-  for n in "${need[@]}"; do [ "$n" = tmux ] && pkgs+=("$map_tmux"); [ "$n" = venv ] && pkgs+=("$map_venv"); done
-  if [ -z "$pm" ]; then
-    echo "agy-turbo: instale ${need[*]} pelo gerenciador de pacotes do seu sistema e rode agy-turbo-setup de novo." >&2
-    exit 1
-  fi
-  sudo=""; [ "$(id -u)" -ne 0 ] && [ "${pm%% *}" != brew ] && sudo="sudo"
-  echo "agy-turbo precisa de: ${pkgs[*]} (árvore ao lado e troca automática de esforço)."
-  if [ -t 0 ]; then read -r -p "Instalar agora com: $sudo $pm ${pkgs[*]} ? [S/n] " ans; else ans=n; fi
-  case "${ans:-s}" in
-    [sSyY]*) [ "${pm%% *}" = apt-get ] && $sudo apt-get update -qq || true
-             $sudo $pm "${pkgs[@]}" || { echo "agy-turbo: instalação falhou" >&2; exit 1; } ;;
-    *) echo "Ok, sem instalar. Para depois: $sudo $pm ${pkgs[*]} && agy-turbo-setup"; exit 1 ;;
-  esac
+  exit 0
 fi
+if command -v apt-get >/dev/null; then pm="apt-get install -y"; map_tmux=tmux; map_venv=python3-venv
+elif command -v dnf >/dev/null; then pm="dnf install -y"; map_tmux=tmux; map_venv=python3
+elif command -v pacman >/dev/null; then pm="pacman -S --noconfirm --needed"; map_tmux=tmux; map_venv=python
+elif command -v zypper >/dev/null; then pm="zypper install -y"; map_tmux=tmux; map_venv=python3
+elif command -v brew >/dev/null; then pm="brew install"; map_tmux=tmux; map_venv=python
+else pm=""; fi
+pkgs=()
+for n in "${need[@]}"; do [ "$n" = tmux ] && pkgs+=("$map_tmux"); [ "$n" = venv ] && pkgs+=("$map_venv"); done
+if [ -z "$pm" ]; then
+  echo "agy-turbo: instale ${need[*]} pelo gerenciador de pacotes do seu sistema e rode agy-turbo-setup de novo." >&2
+  exit 1
+fi
+sudo=""; [ "$(id -u)" -ne 0 ] && [ "${pm%% *}" != brew ] && sudo="sudo"
+echo "agy-turbo precisa de: ${pkgs[*]} (árvore ao lado e troca automática de esforço)."
+if [ -t 0 ]; then read -r -p "Instalar agora com: $sudo $pm ${pkgs[*]} ? [S/n] " ans; else ans=n; fi
+case "${ans:-s}" in
+  [sSyY]*) [ "${pm%% *}" = apt-get ] && $sudo apt-get update -qq || true
+           $sudo $pm "${pkgs[@]}" || { echo "agy-turbo: instalação falhou" >&2; exit 1; } ;;
+  *) echo "Ok, sem instalar. Para depois: $sudo $pm ${pkgs[*]} && agy-turbo-setup"; exit 1 ;;
+esac
 # refaz a configuração na hora (venv, comandos, statusline, shell)
 rm -f "$DATA/bootstrap.json"
 PLUGIN_ROOT=$ROOT PLUGIN_DATA=$DATA python3 -I "$ROOT/hooks/bootstrap.py" && tail -n 6 "$DATA/bootstrap.log"

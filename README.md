@@ -23,7 +23,7 @@ Como qualquer plugin do agy, de onde quer que você esteja:
 agy plugin install https://github.com/caio-rosa-wh/agy-turbo
 ```
 
-É só isso: não há pré-requisito para instalar à mão além do [agy](https://antigravity.google/docs/cli/reference/) logado e do Python 3 que vem com o sistema. Se faltar `tmux` ou o `venv` do Python, o plugin instala sozinho quando o `sudo` não pede senha. Se pedir, na primeira vez que você rodar `agy` no terminal ele pergunta "Instalar agora? [S/n]" e usa o gerenciador do sistema (apt, dnf, pacman, zypper ou brew). Para isso também existe o comando `agy-turbo-setup`. Na **primeira mensagem** de uma sessão do agy, o plugin se configura sozinho, em segundo plano, em cerca de 30 s na primeira vez por causa do download do Textual:
+É só isso: não há pré-requisito para instalar à mão além do [agy](https://antigravity.google/docs/cli/reference/) logado e do Python 3 que vem com o sistema. Se faltar `tmux` ou `python3-venv`, o plugin resolve sozinho em segundo plano — cria o venv com `--without-pip` + `pip.pyz` e, em Debian/Ubuntu, extrai o `tmux` em `~/.local` via `apt-get download` sem precisar de `sudo` (ou instala pelo sistema quando o `sudo` não pede senha). Se ainda faltar algo em outra distro, na primeira vez que você rodar `agy` no terminal ele pergunta "Instalar agora? [S/n]" (`agy-turbo-setup`). Na **primeira mensagem** de uma sessão do agy, o plugin se configura sozinho, em segundo plano, em cerca de 30 s na primeira vez por causa do download do Textual:
 
 0. confere `tmux` e o `venv` do Python;
 1. cria um venv com [Textual](https://textual.textualize.io/) para a árvore (`~/.local/share/agy-turbo/venv`);
