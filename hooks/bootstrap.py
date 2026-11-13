@@ -38,9 +38,47 @@ def enabled(var):
     return os.environ.get(var, "1") != "0"
 
 
+MISSING = []
+PKG = [("apt-get", ["apt-get", "install", "-y"], {"tmux": "tmux", "venv": "python3-venv"}),
+       ("dnf", ["dnf", "install", "-y"], {"tmux": "tmux", "venv": "python3"}),
+       ("pacman", ["pacman", "-S", "--noconfirm", "--needed"], {"tmux": "tmux", "venv": "python"}),
+       ("zypper", ["zypper", "install", "-y"], {"tmux": "tmux", "venv": "python3"}),
+       ("brew", ["brew", "install"], {"tmux": "tmux", "venv": "python"})]
+
+
+def venv_possible():
+    return os.path.exists(os.path.join(VENV, "bin", "python")) or subprocess.run(
+        [sys.executable, "-c", "import ensurepip, venv"], capture_output=True).returncode == 0
+
+
+def step_deps():
+    """tmux e venv do Python: instala sozinho só se o sudo não pedir senha; senão o `agy` pergunta no terminal."""
+    need = [n for n, ok in (("tmux", shutil.which("tmux")), ("venv", venv_possible())) if not ok]
+    if not need:
+        return log("dependências: tmux e venv ok")
+    for pm, cmd, names in PKG:
+        if not shutil.which(pm):
+            continue
+        pkgs = [names[n] for n in need]
+        prefix = [] if pm == "brew" or os.geteuid() == 0 else ["sudo", "-n"]
+        if prefix and subprocess.run(["sudo", "-n", "true"], capture_output=True).returncode != 0:
+            break
+        if pm == "apt-get":
+            subprocess.run(prefix + ["apt-get", "update", "-qq"], capture_output=True, timeout=300)
+        r = subprocess.run(prefix + cmd + pkgs, capture_output=True, text=True, timeout=900)
+        log(f"dependências: {' '.join(prefix + cmd + pkgs)} -> {'ok' if r.returncode == 0 else 'falhou'}")
+        break
+    need = [n for n, ok in (("tmux", shutil.which("tmux")), ("venv", venv_possible())) if not ok]
+    MISSING.extend(need)
+    if need:
+        log(f"dependências: faltam {', '.join(need)}; o comando agy vai oferecer a instalação (agy-turbo-setup)")
+
+
 def step_venv():
     if not enabled("AGY_TURBO_TREE"):
         return log("venv: desligado (AGY_TURBO_TREE=0)")
+    if "venv" in MISSING:
+        raise RuntimeError("python3-venv ausente (agy-turbo-setup instala)")
     py = os.path.join(VENV, "bin", "python")
     if not os.path.exists(py):
         subprocess.run([sys.executable, "-m", "venv", VENV], check=True, capture_output=True, timeout=120)
@@ -59,7 +97,7 @@ def step_venv():
 def step_bin():
     bindir = os.path.join(HOME, ".local", "bin")
     os.makedirs(bindir, exist_ok=True)
-    for name in ("agy-tree", "agy-turbo", "agy-effortless", "agy-turbo-uninstall"):
+    for name in ("agy-tree", "agy-turbo", "agy-effortless", "agy-turbo-setup", "agy-turbo-uninstall"):
         src = os.path.join(common.ROOT, "bin", name)
         if not os.path.exists(src):
             continue
@@ -71,7 +109,7 @@ def step_bin():
             os.symlink(src, dst)
         else:
             log(f"bin: {dst} existe e não é link; não mexi")
-    for f in ("statusline/statusline.sh", "shell/agy.bash"):
+    for f in ("statusline/statusline.sh", "statusline/statusline.py", "shell/agy.bash"):
         p = os.path.join(common.ROOT, f)
         if os.path.exists(p):
             os.chmod(p, 0o755)
@@ -161,16 +199,20 @@ def main():
     st.update({"running_since": time.time(), "version": common.version(), "ok": False})
     common.save("bootstrap.json", st)
     errors = []
-    for step in (step_venv, step_bin, step_statusline, step_shell, step_models):
+    for step in (step_deps, step_venv, step_bin, step_statusline, step_shell, step_models):
         try:
             step()
         except Exception as exc:  # um passo com erro não impede os outros
             errors.append(f"{step.__name__}: {exc}")
             log(f"ERRO {step.__name__}: {exc}")
-    st.update({"running_since": 0, "ok": not errors, "errors": errors, "t": time.time()})
+    st.update({"running_since": 0, "ok": not errors, "errors": errors, "missing": MISSING, "t": time.time()})
     common.save("bootstrap.json", st)
-    msg = ("agy-turbo pronto: abra um terminal novo e rode agy (árvore ao lado)" if not errors
-           else "agy-turbo: configuração com erros, veja " + common.path("bootstrap.log"))
+    if MISSING:
+        msg = (f"agy-turbo: falta {' e '.join(MISSING)}. Abra um terminal novo e rode agy: ele oferece instalar")
+    elif errors:
+        msg = "agy-turbo: configuração com erros, veja " + common.path("bootstrap.log")
+    else:
+        msg = "agy-turbo pronto: abra um terminal novo e rode agy (árvore ao lado)"
     common.save("notice.json", {"t": time.time(), "text": msg})
 
 

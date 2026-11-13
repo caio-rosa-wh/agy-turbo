@@ -17,20 +17,15 @@ Pacote de melhorias para o [Antigravity CLI](https://antigravity.google/docs/cli
 
 ## Instalar (um comando)
 
-Pré-requisitos: o [agy](https://antigravity.google/docs/cli/reference/) instalado e logado, além de `tmux`, `jq` e Python 3 com venv. No Ubuntu/Debian:
-
-```bash
-sudo apt install -y tmux jq python3-venv
-```
-
-Depois, o plugin:
+Como qualquer plugin do agy, de onde quer que você esteja:
 
 ```bash
 agy plugin install https://github.com/caio-rosa-wh/agy-turbo
 ```
 
-É só isso. Na **primeira mensagem** de uma sessão do agy, o plugin se configura sozinho, em segundo plano, em cerca de 30 s na primeira vez por causa do download do Textual:
+É só isso: não há pré-requisito para instalar à mão além do [agy](https://antigravity.google/docs/cli/reference/) logado e do Python 3 que vem com o sistema. Se faltar `tmux` ou o `venv` do Python, o plugin instala sozinho quando o `sudo` não pede senha. Se pedir, na primeira vez que você rodar `agy` no terminal ele pergunta "Instalar agora? [S/n]" e usa o gerenciador do sistema (apt, dnf, pacman, zypper ou brew). Para isso também existe o comando `agy-turbo-setup`. Na **primeira mensagem** de uma sessão do agy, o plugin se configura sozinho, em segundo plano, em cerca de 30 s na primeira vez por causa do download do Textual:
 
+0. confere `tmux` e o `venv` do Python;
 1. cria um venv com [Textual](https://textual.textualize.io/) para a árvore (`~/.local/share/agy-turbo/venv`);
 2. cria os comandos `agy-tree`, `agy-turbo`, `agy-effortless` e `agy-turbo-uninstall` em `~/.local/bin`;
 3. aponta o `statusLine` do agy para a statusline do turbo e guarda a anterior;

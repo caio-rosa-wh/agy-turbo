@@ -1,9 +1,9 @@
 # agy-turbo: faz o comando "agy" interativo abrir com a árvore de arquivos ao lado (tmux por baixo).
 # Carregado pelo ~/.bashrc (configurado pelo bootstrap do plugin). AGY_TREE=0 agy abre o agy puro.
+case ":$PATH:" in *":$HOME/.local/bin:"*) ;; *) export PATH="$HOME/.local/bin:$PATH" ;; esac
 agy() {
   local a
-  if [ "${AGY_TREE:-1}" = "0" ] || [ ! -t 0 ] || [ ! -t 1 ] || ! command -v tmux >/dev/null 2>&1 \
-     || ! command -v agy-turbo >/dev/null 2>&1; then
+  if [ "${AGY_TREE:-1}" = "0" ] || [ ! -t 0 ] || [ ! -t 1 ] || ! command -v agy-turbo >/dev/null 2>&1; then
     command agy "$@"; return
   fi
   case "${1:-}" in
@@ -16,5 +16,14 @@ agy() {
         command agy "$@"; return ;;
     esac
   done
+  # primeira vez sem tmux (ou sem venv): oferece instalar, uma vez por dia
+  if ! command -v tmux >/dev/null 2>&1; then
+    local stamp="$HOME/.local/share/agy-turbo/.setup-asked"
+    if [ ! -f "$stamp" ] || [ -n "$(find "$stamp" -mmin +1440 2>/dev/null)" ]; then
+      mkdir -p "${stamp%/*}" && touch "$stamp"
+      agy-turbo-setup || true
+    fi
+    command -v tmux >/dev/null 2>&1 || { command agy "$@"; return; }
+  fi
   agy-turbo "$@"
 }

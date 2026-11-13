@@ -1,21 +1,42 @@
-#!/usr/bin/env bash
-# Desfaz o que o agy-turbo configurou: statusline anterior, função agy no shell, comandos; e remove o plugin.
-set -uo pipefail
-DATA=${AGY_TURBO_DATA:-$HOME/.gemini/antigravity-cli/plugin_data/agy-turbo}
-CFG=${AGY_SETTINGS:-$HOME/.gemini/antigravity-cli/settings.json}
-if [ -f "$DATA/previous-statusline.json" ] && [ -f "$CFG" ] && command -v jq >/dev/null; then
-  cp -p "$CFG" "$CFG.agy-turbo.bak.$(date +%Y%m%d-%H%M%S)"
-  tmp=$(mktemp "$CFG.XXXX")
-  jq --slurpfile p "$DATA/previous-statusline.json" \
-    'if $p[0].statusLine == null then del(.statusLine) else .statusLine = $p[0].statusLine end' "$CFG" > "$tmp" \
-    && chmod --reference="$CFG" "$tmp" && mv "$tmp" "$CFG" && echo "statusline anterior restaurada"
-fi
-for rc in "$HOME/.bashrc" "$HOME/.zshrc"; do
-  [ -f "$rc" ] && grep -q '# >>> agy-turbo >>>' "$rc" && sed -i '/# >>> agy-turbo >>>/,/# <<< agy-turbo <<</d' "$rc" && echo "função agy removida de $rc"
-done
-for b in agy-tree agy-turbo agy-effortless agy-turbo-uninstall; do
-  [ -L "$HOME/.local/bin/$b" ] && rm -f "$HOME/.local/bin/$b"
-done
-rm -f "$DATA/bootstrap.json"
-command -v agy >/dev/null && agy plugin uninstall agy-turbo
-echo "agy-turbo removido. (venv em ~/.local/share/agy-turbo e dados em $DATA ficam; apague à mão se quiser)"
+#!/usr/bin/env python3
+"""Desfaz o que o agy-turbo configurou (statusline anterior, função agy no shell, comandos) e remove o plugin."""
+import json, os, re, shutil, subprocess, time
+HOME = os.path.expanduser("~")
+DATA = os.environ.get("AGY_TURBO_DATA") or os.path.join(HOME, ".gemini/antigravity-cli/plugin_data/agy-turbo")
+CFG = os.environ.get("AGY_SETTINGS") or os.path.join(HOME, ".gemini/antigravity-cli/settings.json")
+prev = os.path.join(DATA, "previous-statusline.json")
+if os.path.exists(prev) and os.path.exists(CFG):
+    try:
+        cfg, old = json.load(open(CFG)), json.load(open(prev)).get("statusLine")
+        shutil.copy2(CFG, CFG + time.strftime(".agy-turbo.bak.%Y%m%d-%H%M%S"))
+        if old is None:
+            cfg.pop("statusLine", None)
+        else:
+            cfg["statusLine"] = old
+        tmp = CFG + ".tmp"
+        json.dump(cfg, open(tmp, "w"), indent=2, ensure_ascii=False)
+        os.chmod(tmp, os.stat(CFG).st_mode & 0o777)
+        os.replace(tmp, CFG)
+        print("statusline anterior restaurada")
+    except (OSError, ValueError) as exc:
+        print(f"statusline: não restaurei ({exc})")
+for rc in (".bashrc", ".zshrc"):
+    p = os.path.join(HOME, rc)
+    if os.path.exists(p):
+        text = open(p).read()
+        new = re.sub(r"\n?# >>> agy-turbo >>>.*?# <<< agy-turbo <<<\n?", "\n", text, flags=re.S)
+        if new != text:
+            shutil.copy2(p, p + time.strftime(".agy-turbo.bak.%Y%m%d-%H%M%S"))
+            open(p, "w").write(new)
+            print(f"função agy removida de ~/{rc}")
+for b in ("agy-tree", "agy-turbo", "agy-effortless", "agy-turbo-setup", "agy-turbo-uninstall"):
+    p = os.path.join(HOME, ".local/bin", b)
+    if os.path.islink(p):
+        os.remove(p)
+try:
+    os.remove(os.path.join(DATA, "bootstrap.json"))
+except OSError:
+    pass
+if shutil.which("agy"):
+    subprocess.run(["agy", "plugin", "uninstall", "agy-turbo"])
+print(f"agy-turbo removido. (venv em ~/.local/share/agy-turbo e dados em {DATA} ficam; apague à mão se quiser)")
