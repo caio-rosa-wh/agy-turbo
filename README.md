@@ -12,17 +12,18 @@ Pacote de melhorias para o [Antigravity CLI](https://antigravity.google/docs/cli
 | [statusline](statusline/) | ✓ pronto | Statusline de 2 linhas: modelo, esforço, contexto, custo e cotas 5h/7d |
 | [prismantis](plugins/prismantis/) | ✓ pronto | Regras de formato + skill `chart` (barras, linhas e funções em Unicode) |
 | effortless | planejado | Sugestão de esforço por mensagem (hook `PreInvocation`) |
-| filetree | planejado | Atividade de arquivos via hooks, com árvore num pane tmux ao lado |
+| [filetree](filetree/) | ✓ preview | Árvore com git status e brilho onde o agente lê/escreve, ao lado do agy (`agy-turbo`) |
 
 ## Instalar
 
-Precisa de `agy`, `bash` e `jq`.
+Precisa de `agy`, `bash`, `jq` e Python 3 (o filetree cria um venv com Textual).
 
 ```bash
 git clone <url-deste-repo> agy-turbo && cd agy-turbo
 ./install.sh                 # tudo
 ./install.sh statusline      # só a statusline
 ./install.sh prismantis      # só o plugin
+./install.sh filetree        # árvore de arquivos (agy-tree / agy-turbo)
 ```
 
 O instalador da statusline faz backup do `~/.gemini/antigravity-cli/settings.json` e guarda o `statusLine` anterior. Para desfazer:

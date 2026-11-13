@@ -1,0 +1,2 @@
+{ "filetree-activity": {
+    "PostToolUse": [ { "matcher": "*", "hooks": [ { "type": "command", "command": "python3 -I ./hooks/collect.py", "timeout": 5 } ] } ] } }

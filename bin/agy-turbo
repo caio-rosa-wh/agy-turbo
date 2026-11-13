@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+# Abre o agy com a árvore de arquivos ao lado.
+#   tmux disponível: agy à esquerda, árvore à direita (AGY_TREE_WIDTH, padrão 34%).
+#   sem tmux: árvore numa janela nova do Ptyxis (ou do terminal padrão) e agy nesta.
+# Argumentos são repassados ao agy.  AGY_TREE=0 desliga a árvore.
+set -u
+TREE=$(dirname "$(readlink -f "$0")")/agy-tree
+W=${AGY_TREE_WIDTH:-34%}
+cmd="agy"; for a in "$@"; do cmd+=" $(printf '%q' "$a")"; done
+tree="$(printf '%q' "$TREE") $(printf '%q' "$PWD")"
+
+if [ "${AGY_TREE:-1}" = "0" ]; then exec agy "$@"; fi
+if command -v tmux >/dev/null 2>&1; then
+  if [ -n "${TMUX:-}" ]; then
+    tmux split-window -h -d -l "$W" -c "$PWD" "$tree"
+    exec agy "$@"
+  fi
+  exec tmux new-session -s "agy-turbo-$$" -c "$PWD" "$cmd" \; \
+    split-window -h -d -l "$W" -c "$PWD" "$tree" \; \
+    set-option -w -t "agy-turbo-$$" remain-on-exit off \; \
+    select-pane -L
+fi
+if command -v ptyxis >/dev/null 2>&1; then
+  ptyxis --new-window -d "$PWD" -T "agy-tree" -x "$tree" >/dev/null 2>&1 &
+elif command -v x-terminal-emulator >/dev/null 2>&1; then
+  x-terminal-emulator -e bash -c "$tree" >/dev/null 2>&1 &
+else
+  echo "agy-turbo: sem tmux nem terminal gráfico; rode agy-tree noutro terminal" >&2
+fi
+exec agy "$@"

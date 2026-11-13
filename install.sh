@@ -8,6 +8,7 @@ parts=("$@"); [ ${#parts[@]} -eq 0 ] && parts=(statusline $(ls "$DIR/plugins"))
 for p in "${parts[@]}"; do
   case "$p" in
     statusline) "$DIR/statusline/install.sh" ;;
+    filetree)   "$DIR/filetree/install.sh" ;;
     *) [ -d "$DIR/plugins/$p" ] || { echo "parte desconhecida: $p" >&2; exit 1; }
        agy plugin install "$DIR/plugins/$p" ;;
   esac

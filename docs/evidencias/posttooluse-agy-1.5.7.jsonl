@@ -1,0 +1,5 @@
+{"hookEventName":"PostToolUse","toolCall":{"args":{"Path":"/caminho/do/projeto/capture_hook.py"},"id":"call_9576599712662469345","name":"read_file"},"error":"","cwd":"/caminho/do/projeto"}
+{"hookEventName":"PostToolUse","toolCall":{"args":{"CommandLine":"ls -la","WaitMsBeforeAsync":5000,"toolSummary":"List workspace files"},"id":"call_9576599712662470492","name":"run_command"},"error":"","cwd":"/caminho/do/projeto"}
+{"hookEventName":"PostToolUse","toolCall":{"args":{"Content":"oi","Overwrite":true,"Path":"/caminho/do/projeto/ft-probe.txt"},"id":"call_9576599712662467543","name":"write_file"},"error":"","cwd":"/caminho/do/projeto"}
+{"hookEventName":"PostToolUse","toolCall":{"args":{"Path":"/caminho/do/projeto/ft-probe.txt","Replacement":"ola","Target":"oi"},"id":"call_7228373945445600762","name":"edit_file"},"error":"","cwd":"/caminho/do/projeto"}
+{"hookEventName":"PostToolUse","toolCall":{"args":{"CommandLine":"grep -n import capture_hook.py","WaitMsBeforeAsync":5000,"toolSummary":"Search imports in capture_hook.py"},"id":"call_7228373945445600031","name":"run_command"},"error":"","cwd":"/caminho/do/projeto"}

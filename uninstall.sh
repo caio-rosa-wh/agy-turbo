@@ -6,6 +6,7 @@ parts=("$@"); [ ${#parts[@]} -eq 0 ] && parts=(statusline $(ls "$DIR/plugins"))
 for p in "${parts[@]}"; do
   case "$p" in
     statusline) "$DIR/statusline/uninstall.sh" ;;
+    filetree)   "$DIR/filetree/uninstall.sh" ;;
     *) agy plugin uninstall "$p" ;;
   esac
 done

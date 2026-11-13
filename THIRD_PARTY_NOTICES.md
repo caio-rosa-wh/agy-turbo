@@ -6,7 +6,7 @@ O agy-turbo é uma implementação própria para o Antigravity CLI, inspirada no
 | --- | --- | --- |
 | [NahumLitvin/prismantis](https://github.com/NahumLitvin/prismantis) — © 2026 Nahum Litvin | MIT | `plugins/prismantis/rules/AGENTS.md` adapta a nota de formato |
 | [HeyCubit/effortless](https://github.com/HeyCubit/effortless) — © 2026 HeyCubit | MIT | referência de design (planejado) |
-| [data-goblin/claude-code-filetree](https://github.com/data-goblin/claude-code-filetree) — © 2026 Kurt Buhler | MIT | referência de design (planejado) |
+| [data-goblin/claude-code-filetree](https://github.com/data-goblin/claude-code-filetree) — © 2026 Kurt Buhler | MIT | referência de design e de comportamento do `filetree` (código próprio) |
 | [Cockpit, statusline.sh](https://statusline.sh/community/cockpit-4shq) | não declarada | só o layout visual; nenhum código copiado |
 
 Texto da licença MIT, válido para os trechos adaptados acima:

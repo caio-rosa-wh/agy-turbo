@@ -33,6 +33,20 @@ o=$(python3 "$CH" line --series "a:1,2,3" --series "b:3,2,1"); [[ $o == *"● a"
 python3 "$CH" func --expr "__import__('os')" >/dev/null 2>&1 && ko "chart bloqueia expressão" || ok "chart bloqueia expressão"
 w=$(python3 "$CH" func --expr "sin(x)" --width 60 | python3 -Ic 'import sys; print(max(len(l.rstrip("\n")) for l in sys.stdin))'); [ "$w" -le 74 ] && ok "chart cabe em 74 colunas" || ko "chart largura $w"
 
+CO=$DIR/plugins/filetree/hooks/collect.py; TD=$(mktemp -d)
+jq -c '.' "$DIR/docs/evidencias/posttooluse-agy-1.5.7.jsonl" | sed "s#/caminho/do/projeto#$TD#g" | while read -r l; do printf '%s' "$l" | PLUGIN_DATA=$TD python3 -I "$CO" >/dev/null; done
+touch "$TD/capture_hook.py"
+[[ $(jq -r 'select(.tool=="read_file") | .kind' "$TD/activity.jsonl") == read ]] && ok "coletor: read_file" || ko "coletor read_file"
+[[ $(jq -r 'select(.tool=="edit_file") | .kind' "$TD/activity.jsonl") == write ]] && ok "coletor: edit_file" || ko "coletor edit_file"
+[[ $(echo 'lixo' | PLUGIN_DATA=$TD python3 -I "$CO") == "{}" ]] && ok "coletor: entrada inválida responde {}" || ko "coletor inválido"
+echo "{\"toolCall\":{\"name\":\"run_command\",\"args\":{\"CommandLine\":\"rm sumiu.txt\"}},\"cwd\":\"$TD\"}" | PLUGIN_DATA=$TD python3 -I "$CO" >/dev/null
+tail -2 "$TD/activity.jsonl" | grep -q '"kind": "write".*sumiu.txt' && ok "coletor: rm de arquivo já apagado" || ko "coletor rm"
+rm -rf "$TD"
+VPY=${AGY_TURBO_VENV:-$HOME/.local/share/agy-turbo/venv}/bin/python
+if [ -x "$VPY" ]; then
+  [[ $("$VPY" "$DIR/tests/filetree/render_test.py" "$DIR/filetree" 2>&1 | tail -1) == ok ]] && ok "agy-tree headless" || ko "agy-tree headless"
+else echo "skip agy-tree (venv ausente)"; fi
+
 if command -v agy >/dev/null; then
   for p in "$DIR"/plugins/*/; do
     agy plugin validate "$p" --strict >/dev/null 2>&1 && ok "validate $(basename "$p")" || ko "validate $(basename "$p")"
