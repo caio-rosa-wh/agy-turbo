@@ -18,6 +18,9 @@ set -u
 command -v jq >/dev/null 2>&1 || { printf 'agy-cockpit: instale jq\n'; exit 0; }
 
 input=$(cat)
+DATA=${AGY_TURBO_DATA:-$HOME/.gemini/antigravity-cli/plugin_data/agy-turbo}
+# guarda o último payload: o effortless lê o % de contexto daqui
+if [ -d "$DATA" ]; then printf '%s' "$input" > "$DATA/.statusline.tmp" 2>/dev/null && mv -f "$DATA/.statusline.tmp" "$DATA/statusline.json" 2>/dev/null; fi
 
 # Uma única chamada jq: devolve os campos separados por TAB.
 IFS=$'\t' read -r model effort used total pct cost width q5 r5 qw rw state < <(
@@ -124,4 +127,65 @@ quota_seg() { # rótulo pct reset cor
 }
 line2=" usage  $(quota_seg 5h "$q5" "$r5" "$FIVE")  $(quota_seg 7d "$qw" "$rw" "$WEEK")"
 
-printf '%s\n%s\n' "$line1" "$line2"
+# ---------- linha 3: effortless (esforço, cache, contexto, régua, motivo) ----------
+line3=""
+if [ -z "${COCKPIT_NO_EFFORTLESS:-}" ]; then
+  transcript=$(printf '%s' "$input" | jq -r '.transcript_path // empty' 2>/dev/null)
+  last=""
+  if [ -n "$transcript" ] && [ -f "$transcript" ]; then
+    last=$(tail -n 60 "$transcript" 2>/dev/null | jq -rs '[.[] | select(.type=="PLANNER_RESPONSE")] | last
+      | if . then "\(.created_at | sub("\\.[0-9]+";"") | fromdateiso8601)\t\(.cache_read_tokens // 0)" else empty end' 2>/dev/null)
+  fi
+  IFS=$'\t' read -r e_lvl e_levels e_auto e_reason e_pending e_suggest e_handoff n_text < <(
+    jq -rn --slurpfile st <(cat "$DATA/effortless.json" 2>/dev/null || echo '{}') \
+          --slurpfile cf <(cat "$DATA/config.json" 2>/dev/null || echo '{}') \
+          --slurpfile nt <(cat "$DATA/notice.json" 2>/dev/null || echo '{}') \
+          --arg cur "$effort" '
+      ($st[0] // {}) as $s | ($cf[0] // {}) as $c | ($nt[0] // {}) as $n |
+      [ ($cur // ""),
+        (($s.levels // ["low","medium","high"]) | join(",")),
+        (if ($c.auto // true) then "auto" else "off" end),
+        ($s.reason // ""),
+        ($s.pending // ""),
+        ($s.suggest // ""),
+        (if ($s.handoff // false) then "1" else "" end),
+        (if (($n.t // 0) > (now - 3600)) then ($n.text // "") else "" end)
+      ] | map(if . == "" then "-" else . end) | @tsv' 2>/dev/null)
+  for v in e_lvl e_levels e_auto e_reason e_pending e_suggest e_handoff n_text; do [ "${!v:-}" = "-" ] && printf -v "$v" ''; done
+  ACC='38;2;187;154;247'
+  seg="$(c "$ACC")✦$R $(c "1")${e_lvl:-?}$R"
+  if [ -n "$last" ]; then
+    l_t=${last%%$'\t'*}; l_cache=${last##*$'\t'}
+    ttl=${AGY_CACHE_TTL_MIN:-}
+    if [ -z "$ttl" ]; then case "$model" in *Claude*|*claude*) ttl=60 ;; *) ttl=5 ;; esac; fi
+    left=$(( ttl*60 - ( $(date +%s) - ${l_t%.*} ) ))
+    if [ "$left" -gt 0 ]; then
+      cache="cache ~$(( (left + 59) / 60 ))m"
+      [ "${l_cache:-0}" -gt 0 ] 2>/dev/null && cache+=" ($(compact "$l_cache"))"
+      seg+=" $(c "$DIM")·$R $cache"
+    else
+      seg+=" $(c "$DIM")· cache frio$R"
+    fi
+  fi
+  seg+=" $(c "$DIM")·$R ${pct}% context"
+  gauge=""
+  IFS=, read -ra lv <<<"${e_levels:-low,medium,high}"
+  for l in "${lv[@]}"; do
+    if [ "$l" = "$e_lvl" ]; then gauge+=" $(c "1;$ACC")[ $l ]$R"; else gauge+=" $(c "$DIM")$l$R"; fi
+  done
+  tail=""
+  if [ "$e_auto" = "off" ]; then tail="$(c "$DIM")effortless off$R"
+  else
+    tail="$(c "$ACC")auto$R"
+    [ -n "$e_pending" ] && tail+=" $(c "$DIM")↓ $e_pending no fim do turno$R"
+    [ -n "$e_suggest" ] && tail+=" $(c "$WARN")→ /effort $e_suggest$R"
+    [ -n "$e_reason" ] && tail+=" $(c "$DIM")· ${e_reason:0:60}$R"
+  fi
+  hint=""
+  if [ "${pct:-0}" -ge 80 ] 2>/dev/null; then hint=" $(c "$WARN")· /compact$R"
+  elif [ -n "$e_handoff" ] || [ "${pct:-0}" -ge 70 ] 2>/dev/null; then hint=" $(c "$WARN")· /handoff?$R"; fi
+  line3=" $seg  $gauge   $tail$hint"
+  [ -n "$n_text" ] && line3+=$'\n'" $(c "1;$ACC")$n_text$R"
+fi
+
+if [ -n "$line3" ]; then printf '%s\n%s\n%s\n' "$line1" "$line2" "$line3"; else printf '%s\n%s\n' "$line1" "$line2"; fi

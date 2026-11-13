@@ -1,0 +1,9 @@
+{
+  "name": "agy-turbo",
+  "displayName": "agy-turbo",
+  "version": "0.3.0",
+  "description": "Statusline, file tree beside the agent, reply formatting with charts, and automatic reasoning effort (effortless) for the Antigravity CLI.",
+  "author": { "name": "agy-turbo" },
+  "homepage": "https://github.com/caio-rosa-wh/agy-turbo",
+  "repository": "https://github.com/caio-rosa-wh/agy-turbo"
+}

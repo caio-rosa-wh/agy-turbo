@@ -13,19 +13,19 @@ agy-tree ~/projetos/agy-turbo                          seguindo
 │ ├   hooks.json ?                                 2m
 ▸ statusline
   README.md M                                     13m
-escrevendo plugins/filetree/hooks/collect.py   $ grep -n READ …
+escrevendo hooks/collect.py   $ grep -n READ …
 ```
 
 ## Como funciona
 
 O agy não tem painel lateral para plugins, então o filetree tem duas partes:
 
-1. **Plugin `plugins/filetree`:** um hook `PostToolUse` (`hooks/collect.py`, cerca de 17 ms, só biblioteca padrão) grava em `activity.jsonl` cada arquivo lido (`read_file`, `cat`, `grep`…), escrito (`write_file`, `edit_file`, `rm`, `>`…) ou tocado por `git`, além do último comando.
+1. **Hook do plugin:** um `PostToolUse` (`hooks/collect.py`, cerca de 17 ms, só biblioteca padrão) grava em `activity.jsonl` cada arquivo lido (`read_file`, `cat`, `grep`…), escrito (`write_file`, `edit_file`, `rm`, `>`…) ou tocado por `git`, além do último comando.
 2. **App `agy-tree`:** uma TUI em Python/[Textual](https://textual.textualize.io/) que roda ao lado do agy. Lê o `activity.jsonl` e o `git status`.
 
 ## Uso: só `agy`
 
-Depois do `filetree/install.sh`, digitar `agy` num terminal abre o agy com a árvore à direita. O tmux roda por baixo, sem barra de status e com mouse, e a sessão fecha inteira quando você sai do agy. O instalador adiciona ao `~/.bashrc` uma função `agy` (`shell/agy.bash`) que:
+Depois da instalação do agy-turbo, digitar `agy` num terminal abre o agy com a árvore à direita. O tmux roda por baixo, sem barra de status e com mouse, e a sessão fecha inteira quando você sai do agy. A configuração automática adiciona ao `~/.bashrc` uma função `agy` (`shell/agy.bash`) que:
 
 - só entra em ação no `agy` interativo: `agy -p`, `agy plugin …`, `agy update` e outros subcomandos vão direto para o binário;
 - se você já estiver no tmux, só abre a árvore no painel ao lado;
@@ -36,7 +36,7 @@ Depois do `filetree/install.sh`, digitar `agy` num terminal abre o agy com a ár
 ## Instalar e usar
 
 ```bash
-filetree/install.sh     # venv com Textual, comandos agy-tree/agy-turbo em ~/.local/bin, plugin de hooks
+agy plugin install https://github.com/caio-rosa-wh/agy-turbo   # o plugin se configura na 1ª sessão
 agy                     # agy + árvore ao lado (via função do shell)
 agy-turbo               # o mesmo, chamando o lançador direto
 agy-tree [PASTA]        # só a árvore, para usar em outro terminal

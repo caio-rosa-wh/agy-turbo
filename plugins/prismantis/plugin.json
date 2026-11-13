@@ -1,9 +1,0 @@
-{
-  "name": "prismantis",
-  "displayName": "Prismantis (agy-turbo)",
-  "description": "Format guidance so replies use tables, alerts, fenced code and diagrams the Antigravity CLI draws. Adapted from NahumLitvin/prismantis (MIT).",
-  "author": {
-    "name": "agy-turbo"
-  },
-  "version": "0.2.1"
-}

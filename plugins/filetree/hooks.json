@@ -1,3 +1,0 @@
-{ "filetree-activity": {
-    "SessionStart": [ { "type": "command", "command": "python3 -I ./hooks/open_tree.py", "timeout": 5 } ],
-    "PostToolUse": [ { "matcher": "*", "hooks": [ { "type": "command", "command": "python3 -I ./hooks/collect.py", "timeout": 5 } ] } ] } }

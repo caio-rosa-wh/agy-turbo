@@ -9,7 +9,7 @@ Conteúdo: `rules/AGENTS.md`, adaptado da nota de formato do prismantis (MIT). A
 - Aviso sobre `$`, que abre matemática inline no agy.
 
 ```bash
-agy plugin install ./plugins/prismantis
+agy plugin install https://github.com/caio-rosa-wh/agy-turbo
 ```
 
 ## Skill `chart`
@@ -23,7 +23,7 @@ O agy não desenha gráficos de barra nem de linha. A skill `chart` (`skills/cha
 - `spark`: tendência numa linha só
 
 ```bash
-python3 plugins/prismantis/skills/chart/scripts/chart.py func --expr "cos(x)" --from 0 --to 2*pi
+python3 skills/chart/scripts/chart.py func --expr "cos(x)" --from 0 --to 2*pi
 ```
 
 `--expr` não usa `eval`: a expressão é validada por AST e só aceita números, `x`, operadores e funções de `math`. Os gráficos saem sem cor, porque o agy mostra blocos de código como texto puro.

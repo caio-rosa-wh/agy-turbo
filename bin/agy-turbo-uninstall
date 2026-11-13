@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# Desfaz o que o agy-turbo configurou: statusline anterior, função agy no shell, comandos; e remove o plugin.
+set -uo pipefail
+DATA=${AGY_TURBO_DATA:-$HOME/.gemini/antigravity-cli/plugin_data/agy-turbo}
+CFG=${AGY_SETTINGS:-$HOME/.gemini/antigravity-cli/settings.json}
+if [ -f "$DATA/previous-statusline.json" ] && [ -f "$CFG" ] && command -v jq >/dev/null; then
+  cp -p "$CFG" "$CFG.agy-turbo.bak.$(date +%Y%m%d-%H%M%S)"
+  tmp=$(mktemp "$CFG.XXXX")
+  jq --slurpfile p "$DATA/previous-statusline.json" \
+    'if $p[0].statusLine == null then del(.statusLine) else .statusLine = $p[0].statusLine end' "$CFG" > "$tmp" \
+    && chmod --reference="$CFG" "$tmp" && mv "$tmp" "$CFG" && echo "statusline anterior restaurada"
+fi
+for rc in "$HOME/.bashrc" "$HOME/.zshrc"; do
+  [ -f "$rc" ] && grep -q '# >>> agy-turbo >>>' "$rc" && sed -i '/# >>> agy-turbo >>>/,/# <<< agy-turbo <<</d' "$rc" && echo "função agy removida de $rc"
+done
+for b in agy-tree agy-turbo agy-effortless agy-turbo-uninstall; do
+  [ -L "$HOME/.local/bin/$b" ] && rm -f "$HOME/.local/bin/$b"
+done
+rm -f "$DATA/bootstrap.json"
+command -v agy >/dev/null && agy plugin uninstall agy-turbo
+echo "agy-turbo removido. (venv em ~/.local/share/agy-turbo e dados em $DATA ficam; apague à mão se quiser)"

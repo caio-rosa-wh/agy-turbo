@@ -1,0 +1,12 @@
+{
+  "agy-turbo-session": {
+    "SessionStart": [ { "type": "command", "command": "python3 -I ./hooks/session_start.py", "timeout": 10 } ]
+  },
+  "agy-turbo-effortless": {
+    "PreInvocation": [ { "type": "command", "command": "python3 -I ./hooks/effortless.py", "timeout": 30 } ],
+    "Stop": [ { "type": "command", "command": "python3 -I ./hooks/effortless.py", "timeout": 5 } ]
+  },
+  "agy-turbo-filetree": {
+    "PostToolUse": [ { "matcher": "*", "hooks": [ { "type": "command", "command": "python3 -I ./hooks/collect.py", "timeout": 5 } ] } ]
+  }
+}

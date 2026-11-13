@@ -9,15 +9,13 @@ import subprocess
 import sys
 
 
-def main():
-    try:
-        ev = json.loads(sys.stdin.read() or "{}")
-    except ValueError:
-        ev = {}
+def open_tree(ev):
     pane = os.environ.get("TMUX_PANE")
     if not os.environ.get("TMUX") or not pane or os.environ.get("AGY_TREE", "1") == "0":
         return
     tree = shutil.which("agy-tree") or os.path.expanduser("~/.local/bin/agy-tree")
+    if not os.path.exists(tree):
+        tree = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "bin", "agy-tree")
     if not os.path.exists(tree):
         return
     titles = subprocess.run(["tmux", "list-panes", "-t", pane, "-F", "#{pane_title}"],
@@ -31,7 +29,7 @@ def main():
 
 if __name__ == "__main__":
     try:
-        main()
+        open_tree(json.loads(sys.stdin.read() or "{}"))
     except Exception:
         pass
     print("{}")

@@ -14,10 +14,10 @@ script and paste its output, unchanged, into a ```text block in the reply.
 ## Steps
 
 1. Run [chart.py](./scripts/chart.py) with `python3` (standard library only). The installed copy is at
-   `~/.gemini/config/plugins/prismantis/skills/chart/scripts/chart.py`.
+   `~/.gemini/config/plugins/agy-turbo/skills/chart/scripts/chart.py`.
 
    ```bash
-   S=~/.gemini/config/plugins/prismantis/skills/chart/scripts/chart.py
+   S=~/.gemini/config/plugins/agy-turbo/skills/chart/scripts/chart.py
    python3 $S bar   --title "ALB 5xx por 5 min" --labels 12:09,12:24,12:39 --values 2,4,82
    python3 $S hbar  --labels api,web,db --values 120,45,300 --unit ms
    python3 $S line  --labels jan,fev,mar,abr --series "east:3,5,4,8" --series "west:1,2,6,5"

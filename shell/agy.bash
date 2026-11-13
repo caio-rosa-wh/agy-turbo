@@ -1,5 +1,5 @@
 # agy-turbo: faz o comando "agy" interativo abrir com a árvore de arquivos ao lado (tmux por baixo).
-# Carregado pelo ~/.bashrc (filetree/install.sh). AGY_TREE=0 agy abre o agy puro.
+# Carregado pelo ~/.bashrc (configurado pelo bootstrap do plugin). AGY_TREE=0 agy abre o agy puro.
 agy() {
   local a
   if [ "${AGY_TREE:-1}" = "0" ] || [ ! -t 0 ] || [ ! -t 1 ] || ! command -v tmux >/dev/null 2>&1 \

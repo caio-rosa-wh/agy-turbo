@@ -19,21 +19,14 @@ out=$(jq '.model.display_name="Claude Sonnet 5.5 (Thinking)"|.quota["3p-5h"].rem
 [[ $(echo 'xx' | "$SL") == *"JSON inválido"* ]] && ok "JSON inválido" || ko "JSON inválido"
 [[ $(jq '.terminal_width=60' "$FIX" | NO_COLOR=1 "$SL") != *$'\033'* ]] && ok "NO_COLOR" || ko "NO_COLOR"
 
-T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
-echo '{"statusLine":{"type":"command","command":"/antigo.sh"},"x":1}' > "$T/settings.json"
-AGY_SETTINGS=$T/settings.json "$DIR/statusline/install.sh" >/dev/null
-[[ $(jq -r .statusLine.command "$T/settings.json") == "$SL" ]] && ok "install aponta para statusline.sh" || ko "install"
-AGY_SETTINGS=$T/settings.json "$DIR/statusline/uninstall.sh" >/dev/null
-[[ $(jq -c . "$T/settings.json") == '{"statusLine":{"type":"command","command":"/antigo.sh"},"x":1}' ]] && ok "uninstall restaura" || ko "uninstall"
-
-CH=$DIR/plugins/prismantis/skills/chart/scripts/chart.py
+CH=$DIR/skills/chart/scripts/chart.py
 o=$(python3 "$CH" func --expr "cos(x)" --from 0 --to 2*pi --width 50); [[ $o == *"π/2"*"3π/2"*"2π"* && $o == *"-1 ┤"* ]] && ok "chart func cos" || ko "chart func"
 o=$(python3 "$CH" bar --labels a,b,c --values 3,-2,5); [[ $o == *"-2"* && $o == *"█"* ]] && ok "chart bar com negativo" || ko "chart bar"
 o=$(python3 "$CH" line --series "a:1,2,3" --series "b:3,2,1"); [[ $o == *"● a"*"○ b"* ]] && ok "chart line com legenda" || ko "chart line"
 python3 "$CH" func --expr "__import__('os')" >/dev/null 2>&1 && ko "chart bloqueia expressão" || ok "chart bloqueia expressão"
 w=$(python3 "$CH" func --expr "sin(x)" --width 60 | python3 -Ic 'import sys; print(max(len(l.rstrip("\n")) for l in sys.stdin))'); [ "$w" -le 74 ] && ok "chart cabe em 74 colunas" || ko "chart largura $w"
 
-CO=$DIR/plugins/filetree/hooks/collect.py; TD=$(mktemp -d)
+CO=$DIR/hooks/collect.py; TD=$(mktemp -d)
 jq -c '.' "$DIR/docs/evidencias/posttooluse-agy-1.5.7.jsonl" | sed "s#/caminho/do/projeto#$TD#g" | while read -r l; do printf '%s' "$l" | PLUGIN_DATA=$TD python3 -I "$CO" >/dev/null; done
 touch "$TD/capture_hook.py"
 [[ $(jq -r 'select(.tool=="read_file") | .kind' "$TD/activity.jsonl") == read ]] && ok "coletor: read_file" || ko "coletor read_file"
@@ -47,9 +40,12 @@ if [ -x "$VPY" ]; then
   [[ $("$VPY" "$DIR/tests/filetree/render_test.py" "$DIR/filetree" 2>&1 | tail -1) == ok ]] && ok "agy-tree headless" || ko "agy-tree headless"
 else echo "skip agy-tree (venv ausente)"; fi
 
+python3 -I "$DIR/tests/effortless_test.py" "$DIR" && ok "effortless: decisões e aplicação via tmux" || ko "effortless"
+python3 -I "$DIR/tests/bootstrap_test.py" "$DIR" && ok "bootstrap: HOME limpo, idempotente" || ko "bootstrap"
+o=$(jq '.terminal_width=150|.context_window.used_percentage=72' "$FIX" | AGY_TURBO_DATA=$(mktemp -d) "$SL" | strip | sed -n 3p)
+[[ $o == *"72% context"*"[ high ]"*"/handoff?"* ]] && ok "statusline: linha do effortless" || ko "statusline effortless: $o"
+
 if command -v agy >/dev/null; then
-  for p in "$DIR"/plugins/*/; do
-    agy plugin validate "$p" --strict >/dev/null 2>&1 && ok "validate $(basename "$p")" || ko "validate $(basename "$p")"
-  done
+  agy plugin validate "$DIR" --strict >/dev/null 2>&1 && ok "validate agy-turbo" || ko "validate agy-turbo"
 else echo "skip validate (agy ausente)"; fi
 exit $fail

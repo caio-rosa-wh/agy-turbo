@@ -21,7 +21,7 @@ MAX_BYTES = 5 * 1024 * 1024
 
 
 def data_dir():
-    d = os.environ.get("PLUGIN_DATA") or os.path.expanduser("~/.local/share/agy-turbo/filetree")
+    d = os.environ.get("PLUGIN_DATA") or os.environ.get("AGY_TURBO_DATA") or os.path.expanduser("~/.gemini/antigravity-cli/plugin_data/agy-turbo")
     os.makedirs(d, exist_ok=True)
     return d
 
@@ -75,6 +75,9 @@ def shell_events(cmdline, cwd):
 
 def main():
     raw = sys.stdin.read()
+    if os.environ.get("AGY_TURBO_JUDGE") == "1":
+        print("{}")
+        return
     try:
         ev = json.loads(raw or "{}")
     except ValueError:

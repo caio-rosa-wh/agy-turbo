@@ -2,6 +2,6 @@
 # Árvore de arquivos do agy-turbo. Uso: agy-tree [PASTA]
 DIR=$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)
 PY=${AGY_TURBO_VENV:-$HOME/.local/share/agy-turbo/venv}/bin/python
-[ -x "$PY" ] || { echo "agy-tree: rode $DIR/filetree/install.sh primeiro" >&2; exit 1; }
+[ -x "$PY" ] || { echo "agy-tree: o ambiente ainda não foi criado; abra o agy e mande uma mensagem (o agy-turbo se configura sozinho) ou rode $DIR/install.sh" >&2; exit 1; }
 printf '\033]2;agy-tree\033\\' 2>/dev/null
 exec "$PY" "$DIR/filetree/agy_tree.py" "$@"

@@ -9,6 +9,7 @@ Uso: agy-tree [PASTA]
 from __future__ import annotations
 
 import argparse
+import calendar
 import json
 import os
 import shlex
@@ -33,7 +34,9 @@ from textual.widgets.tree import TreeNode
 VERSION = "0.2.0"
 HIDE = {"node_modules", "__pycache__", ".venv", "venv", ".mypy_cache", ".pytest_cache", ".ruff_cache", ".DS_Store"}
 WALK_SKIP = HIDE | {".git", ".terraform", ".next", "dist", "build", ".cache"}
+DATA = os.environ.get("AGY_TURBO_DATA") or os.path.expanduser("~/.gemini/antigravity-cli/plugin_data/agy-turbo")
 ACTIVITY_DEFAULT = [
+    os.path.join(DATA, "activity.jsonl"),
     os.path.expanduser("~/.gemini/antigravity-cli/plugin_data/filetree/activity.jsonl"),
     os.path.expanduser("~/.gemini/config/plugin_data/filetree/activity.jsonl"),
     os.path.expanduser("~/.local/share/agy-turbo/filetree/activity.jsonl"),
@@ -474,6 +477,7 @@ class AgyTree(App):
     #help {{ display: none; padding: 1 2; height: 1fr; }}
     #help.on {{ display: block; }}
     #footer {{ height: 1; padding: 0 1; color: {C['muted']}; }}
+    #effbar {{ height: auto; max-height: 2; padding: 0 1; background: {C['bar']}; }}
     """
     BINDINGS = [
         Binding("q", "quit", "sair"),
@@ -520,6 +524,7 @@ class AgyTree(App):
             yield FileTree(self.root_path, self)
             yield Static(HELP, id="help")
             yield Preview()
+        yield Static(id="effbar")
         yield Static(id="footer")
 
     @property
@@ -535,6 +540,78 @@ class AgyTree(App):
                 self.offsets[f] = 0
         self.set_interval(0.1, self.tick)
         self.set_interval(3.0, self.refresh_git)
+        self.set_interval(1.0, self.update_effbar)
+        self.update_effbar()
+
+    # ---------- barra do effortless (ao vivo: a statusline do agy não atualiza parada) ----------
+    def _json(self, name: str) -> dict:
+        try:
+            with open(os.path.join(DATA, name), encoding="utf-8") as f:
+                return json.load(f)
+        except (OSError, ValueError):
+            return {}
+
+    def update_effbar(self) -> None:
+        sl, st, cf = self._json("statusline.json"), self._json("effortless.json"), self._json("config.json")
+        bar = self.query_one("#effbar", Static)
+        if not sl and not st:
+            bar.display = False
+            return
+        bar.display = True
+        model = sl.get("model") or {}
+        cur = model.get("effort") or st.get("current") or "?"
+        pct = float((sl.get("context_window") or {}).get("used_percentage") or 0)
+        t = Text()
+        t.append("✦ ", style=C["read"])
+        t.append(cur, style=f"bold {C['fg']}")
+        # cache: tempo desde a última chamada ao modelo contra um TTL estimado
+        last = None
+        tp = sl.get("transcript_path")
+        if tp:
+            try:
+                with open(tp, "rb") as f:
+                    f.seek(0, 2)
+                    f.seek(max(0, f.tell() - 60_000))
+                    for line in reversed(f.read().decode("utf-8", errors="replace").splitlines()):
+                        try:
+                            d = json.loads(line)
+                        except ValueError:
+                            continue
+                        if d.get("type") == "PLANNER_RESPONSE" and d.get("created_at"):
+                            last = (calendar.timegm(time.strptime(d["created_at"][:19], "%Y-%m-%dT%H:%M:%S")),
+                                    int(d.get("cache_read_tokens") or 0))
+                            break
+            except OSError:
+                pass
+        if last:
+            name = (model.get("display_name") or "").lower()
+            ttl = float(os.environ.get("AGY_CACHE_TTL_MIN") or (60 if "claude" in name else 5)) * 60
+            left = ttl - (time.time() - last[0])
+            if left > 0:
+                m, sec = divmod(int(left), 60)
+                t.append(f" · cache {m}:{sec:02d}", style=C["git"] if left > 60 else C["M"])
+                if last[1]:
+                    t.append(f" ({last[1] // 1000}k)", style=C["muted"])
+            else:
+                t.append(" · cache frio", style=C["muted"])
+        t.append(f" · {pct:.0f}% context", style=C["del"] if pct >= 80 else C["M"] if pct >= 70 else C["fg"])
+        auto = cf.get("auto", True)
+        t.append("   ")
+        t.append("[auto]" if auto else "[off]", style=f"bold {C['read']}" if auto else C["muted"])
+        if pct >= 80:
+            t.append("  /compact", style=C["M"])
+        elif st.get("handoff") or pct >= 70:
+            t.append("  /handoff", style=C["M"])
+        gauge = Text()
+        for lvl in st.get("levels") or ["low", "medium", "high"]:
+            gauge.append(f"[{lvl}] " if lvl == cur else f"{lvl} ", style=f"bold {C['read']}" if lvl == cur else C["muted"])
+        if st.get("pending"):
+            gauge.append(f"↓ {st['pending']} no fim  ", style=C["muted"])
+        if st.get("reason") and auto:
+            gauge.append(str(st["reason"])[:70], style=C["muted"])
+        t.append("\n")
+        t.append_text(gauge)
+        bar.update(t)
 
     def _mount_root(self) -> None:
         t = self.tree
