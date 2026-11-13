@@ -10,7 +10,7 @@ Pacote de melhorias para o [Antigravity CLI](https://antigravity.google/docs/cli
 | Parte | Estado | O que faz |
 | --- | --- | --- |
 | [statusline](statusline/) | ✓ pronto | Statusline de 2 linhas: modelo, esforço, contexto, custo e cotas 5h/7d |
-| [prismantis](plugins/prismantis/) | ✓ pronto | Regras de formato: tabelas, alertas, código e diagramas que o agy desenha |
+| [prismantis](plugins/prismantis/) | ✓ pronto | Regras de formato + skill `chart` (barras, linhas e funções em Unicode) |
 | effortless | planejado | Sugestão de esforço por mensagem (hook `PreInvocation`) |
 | filetree | planejado | Atividade de arquivos via hooks, com árvore num pane tmux ao lado |
 

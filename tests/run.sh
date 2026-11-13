@@ -26,6 +26,13 @@ AGY_SETTINGS=$T/settings.json "$DIR/statusline/install.sh" >/dev/null
 AGY_SETTINGS=$T/settings.json "$DIR/statusline/uninstall.sh" >/dev/null
 [[ $(jq -c . "$T/settings.json") == '{"statusLine":{"type":"command","command":"/antigo.sh"},"x":1}' ]] && ok "uninstall restaura" || ko "uninstall"
 
+CH=$DIR/plugins/prismantis/skills/chart/scripts/chart.py
+o=$(python3 "$CH" func --expr "cos(x)" --from 0 --to 2*pi --width 50); [[ $o == *"π/2"*"3π/2"*"2π"* && $o == *"-1 ┤"* ]] && ok "chart func cos" || ko "chart func"
+o=$(python3 "$CH" bar --labels a,b,c --values 3,-2,5); [[ $o == *"-2"* && $o == *"█"* ]] && ok "chart bar com negativo" || ko "chart bar"
+o=$(python3 "$CH" line --series "a:1,2,3" --series "b:3,2,1"); [[ $o == *"● a"*"○ b"* ]] && ok "chart line com legenda" || ko "chart line"
+python3 "$CH" func --expr "__import__('os')" >/dev/null 2>&1 && ko "chart bloqueia expressão" || ok "chart bloqueia expressão"
+w=$(python3 "$CH" func --expr "sin(x)" --width 60 | python3 -Ic 'import sys; print(max(len(l.rstrip("\n")) for l in sys.stdin))'); [ "$w" -le 74 ] && ok "chart cabe em 74 colunas" || ko "chart largura $w"
+
 if command -v agy >/dev/null; then
   for p in "$DIR"/plugins/*/; do
     agy plugin validate "$p" --strict >/dev/null 2>&1 && ok "validate $(basename "$p")" || ko "validate $(basename "$p")"

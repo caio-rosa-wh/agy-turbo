@@ -11,3 +11,19 @@ Conteúdo: `rules/AGENTS.md`, adaptado da nota de formato do prismantis (MIT). A
 ```bash
 agy plugin install ./plugins/prismantis
 ```
+
+## Skill `chart`
+
+O agy não desenha gráficos de barra nem de linha. A skill `chart` (`skills/chart/scripts/chart.py`, só biblioteca padrão do Python) gera esses gráficos em Unicode, e o modelo cola a saída num bloco ` ```text `. Tipos:
+
+- `bar`: barras verticais, com o valor em cima, e suporte a negativos
+- `hbar`: barras horizontais
+- `line`: linhas em braille, com várias séries, marcadores e legenda
+- `func`: função de `x`, com eixo em múltiplos de π
+- `spark`: tendência numa linha só
+
+```bash
+python3 plugins/prismantis/skills/chart/scripts/chart.py func --expr "cos(x)" --from 0 --to 2*pi
+```
+
+`--expr` não usa `eval`: a expressão é validada por AST e só aceita números, `x`, operadores e funções de `math`. Os gráficos saem sem cor, porque o agy mostra blocos de código como texto puro.
