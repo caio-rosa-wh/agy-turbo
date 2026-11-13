@@ -10,4 +10,5 @@ Adapted from the prismantis format note (https://github.com/NahumLitvin/prismant
 - When position carries meaning (a screen layout, phases on a time axis, before/after), draw a text picture in a plain fenced block (```text). It prints exactly as written, with no colors: at most 74 columns, glyphs one column wide such as ─│┌┐└┘├┤┬┴┼═║→←►◄▲▼✓✗●○█▏■□·, no emoji or tabs, and box rows padded to the top border. Draw a time axis with edge ticks like ▏───▏───▏.
 - Add a diagram or picture only when a flow or a numeric series is easier to see than read, and never a second picture of what one already shows. Skip them for short or simple answers, code changes and reports. The prose never retells the picture.
 - When asked to explain, compare or plan something and a picture would help, build the reply around it, with the core on the first screen as a picture or a sentence.
-- `$` opens inline math in this CLI: in prose write a literal dollar as `\$` (prices: \$100); inside code spans and fenced blocks write it bare.
+- Write money as `USD 188.56` or `R$ 188,56` with the currency code, never a bare `$` amount and never `\$`: the CLI shows the backslash literally, and two bare `$` in one paragraph can turn into math.
+- Tables stretch to the full terminal width: keep them to the columns that matter (2-4) and short cells; move long notes to a sentence below the table.

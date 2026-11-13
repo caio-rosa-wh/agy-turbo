@@ -69,7 +69,7 @@ def bar(labels, values, height, title, unit):
     label_row = []
     for v, t in zip(values, tops):
         label_row.append(min(height - 1, (t + 7) // 8) if v >= 0 else max(0, t // 8 - 1))
-    out = title_line((title + (f" ({unit})" if unit else "")) if title else "", ylab + 2 + n * (colw + 1))
+    out = title_line(title + (f" ({unit})" if unit and unit not in title else ""), ylab + 2 + n * (colw + 1))
     for r in range(height - 1, -1, -1):
         t = tick_rows.get(r)
         line = (fmt(t).rjust(ylab) + " ┤") if t is not None else (" " * ylab + " │")
@@ -97,13 +97,13 @@ def bar(labels, values, height, title, unit):
 def hbar(labels, values, width, title, unit):
     vmax = max(values) or 1
     lw = max(len(l) for l in labels)
-    out = title_line((title + (f" ({unit})" if unit else "")) if title else "", lw + width + 10)
+    out = title_line(title + (f" ({unit})" if unit and unit not in title else ""), lw + width + 10)
     for l, v in zip(labels, values):
         cells = max(0.0, v) / vmax * width
         full = int(cells)
         frac = int(round((cells - full) * 8))
         b = "█" * full + (HBLOCKS[frac] if frac and full < width else "")
-        out.append(f"{l.rjust(lw)} │{b} {fmt(v)}{unit and ' ' + unit}".rstrip())
+        out.append(f"{l.rjust(lw)} │{b} {fmt(v)}".rstrip())
     return out
 
 
