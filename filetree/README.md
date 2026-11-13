@@ -23,15 +23,22 @@ O agy não tem painel lateral para plugins, então o filetree tem duas partes:
 1. **Plugin `plugins/filetree`:** um hook `PostToolUse` (`hooks/collect.py`, cerca de 17 ms, só biblioteca padrão) grava em `activity.jsonl` cada arquivo lido (`read_file`, `cat`, `grep`…), escrito (`write_file`, `edit_file`, `rm`, `>`…) ou tocado por `git`, além do último comando.
 2. **App `agy-tree`:** uma TUI em Python/[Textual](https://textual.textualize.io/) que roda ao lado do agy. Lê o `activity.jsonl` e o `git status`.
 
-## Abrir sozinho no tmux
+## Uso: só `agy`
 
-Com o `agy` rodando dentro do tmux, o plugin abre a árvore à direita na primeira mensagem da sessão, uma vez por janela (hook `SessionStart`). Não é preciso usar o `agy-turbo`. Para desligar, use `AGY_TREE=0`; para mudar a largura, `AGY_TREE_WIDTH=40%`.
+Depois do `filetree/install.sh`, digitar `agy` num terminal abre o agy com a árvore à direita. O tmux roda por baixo, sem barra de status e com mouse, e a sessão fecha inteira quando você sai do agy. O instalador adiciona ao `~/.bashrc` uma função `agy` (`shell/agy.bash`) que:
+
+- só entra em ação no `agy` interativo: `agy -p`, `agy plugin …`, `agy update` e outros subcomandos vão direto para o binário;
+- se você já estiver no tmux, só abre a árvore no painel ao lado;
+- passa direto quando o tmux não está instalado.
+
+`AGY_TREE=0 agy` abre o agy puro e `AGY_TREE_WIDTH=40% agy` muda a largura da árvore. Se o agy for aberto dentro do tmux sem a função, o hook `SessionStart` do plugin abre a árvore na primeira mensagem.
 
 ## Instalar e usar
 
 ```bash
 filetree/install.sh     # venv com Textual, comandos agy-tree/agy-turbo em ~/.local/bin, plugin de hooks
-agy-turbo               # agy + árvore ao lado (argumentos vão para o agy)
+agy                     # agy + árvore ao lado (via função do shell)
+agy-turbo               # o mesmo, chamando o lançador direto
 agy-tree [PASTA]        # só a árvore, para usar em outro terminal
 ```
 

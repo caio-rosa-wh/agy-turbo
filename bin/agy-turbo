@@ -6,18 +6,24 @@
 set -u
 TREE=$(dirname "$(readlink -f "$0")")/agy-tree
 W=${AGY_TREE_WIDTH:-34%}
-cmd="agy"; for a in "$@"; do cmd+=" $(printf '%q' "$a")"; done
+AGY=$(type -P agy)   # o binário, não a função do shell
+cmd="$(printf '%q' "$AGY")"; for a in "$@"; do cmd+=" $(printf '%q' "$a")"; done
 tree="$(printf '%q' "$TREE") $(printf '%q' "$PWD")"
 
-if [ "${AGY_TREE:-1}" = "0" ]; then exec agy "$@"; fi
+if [ "${AGY_TREE:-1}" = "0" ]; then exec "$(type -P agy)" "$@"; fi
 if command -v tmux >/dev/null 2>&1; then
   if [ -n "${TMUX:-}" ]; then
-    tmux split-window -h -d -l "$W" -c "$PWD" "$tree"
-    exec agy "$@"
+    tmux list-panes -F '#{pane_title}' | grep -qx agy-tree || tmux split-window -h -d -l "$W" -c "$PWD" "$tree"
+    exec "$(type -P agy)" "$@"
   fi
-  exec tmux new-session -s "agy-turbo-$$" -c "$PWD" "$cmd" \; \
+  S="agy-turbo-$$"
+  # ao sair do agy a sessão inteira fecha (a árvore junto)
+  exec tmux new-session -s "$S" -c "$PWD" "$cmd; tmux kill-session -t $S" \; \
     split-window -h -d -l "$W" -c "$PWD" "$tree" \; \
-    set-option -t "agy-turbo-$$" mouse on \; \
+    set-option -t "$S" mouse on \; \
+    set-option -t "$S" status off \; \
+    set-option -t "$S" pane-border-style "fg=#3b4261" \; \
+    set-option -t "$S" pane-active-border-style "fg=#3b4261" \; \
     select-pane -L
 fi
 if command -v ptyxis >/dev/null 2>&1; then
@@ -27,4 +33,4 @@ elif command -v x-terminal-emulator >/dev/null 2>&1; then
 else
   echo "agy-turbo: sem tmux nem terminal gráfico; rode agy-tree noutro terminal" >&2
 fi
-exec agy "$@"
+exec "$(type -P agy)" "$@"

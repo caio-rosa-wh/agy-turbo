@@ -12,7 +12,7 @@ Pacote de melhorias para o [Antigravity CLI](https://antigravity.google/docs/cli
 | [statusline](statusline/) | ✓ pronto | Statusline de 2 linhas: modelo, esforço, contexto, custo e cotas 5h/7d |
 | [prismantis](plugins/prismantis/) | ✓ pronto | Regras de formato + skill `chart` (barras, linhas e funções em Unicode) |
 | effortless | planejado | Sugestão de esforço por mensagem (hook `PreInvocation`) |
-| [filetree](filetree/) | ✓ preview | Árvore com git status e brilho onde o agente lê/escreve, ao lado do agy (`agy-turbo`) |
+| [filetree](filetree/) | ✓ preview | Árvore com git status e brilho onde o agente lê/escreve; abre ao lado do `agy` |
 
 ## Instalar
 
