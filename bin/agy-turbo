@@ -17,7 +17,7 @@ if command -v tmux >/dev/null 2>&1; then
   fi
   exec tmux new-session -s "agy-turbo-$$" -c "$PWD" "$cmd" \; \
     split-window -h -d -l "$W" -c "$PWD" "$tree" \; \
-    set-option -w -t "agy-turbo-$$" remain-on-exit off \; \
+    set-option -t "agy-turbo-$$" mouse on ; \
     select-pane -L
 fi
 if command -v ptyxis >/dev/null 2>&1; then
