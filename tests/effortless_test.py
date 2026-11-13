@@ -16,11 +16,13 @@ e.subprocess.Popen = lambda *a, **k: spawned.append(a)
 L = ["low", "medium", "high", "xhigh"]
 c = e.cfg()
 # regras locais
-assert e.local("max effort, revise tudo", "low", L, c)[::2] == ("xhigh", True)
+assert e.local("max effort, revise tudo", "low", L, c)[0::2] == ("xhigh", True)
 assert e.local("ok, pode", "high", L, c)[0] == "high"
-assert e.local("investigue o deadlock na fila", "low", L, c) == ("high", "tarefa pesada", True)
+assert e.local("investigue o deadlock na fila", "low", L, c) == ("high", "tarefa pesada", True, True)
 assert e.local("investigue o deadlock na fila", "medium", L, c)[2] is False
 assert e.local("quantos arquivos tem?", "high", L, c)[0] == "low"
+assert e.local("quantos arquivos tem?", "high", L, c)[3] is True          # regra clara: auto não chama o juiz
+assert e.local("ajuste a função de parse para aceitar datas no formato brasileiro", "low", L, c)[3] is False
 assert e.limits("high", L, dict(c, economy=True)) == "medium"
 assert e.limits("low", L, dict(c, floor="medium")) == "medium"
 # parser com a saída real do agy -p (dois objetos JSON e structured_output)
@@ -36,17 +38,28 @@ ev = {"hookEventName": "PreInvocation", "invocationNum": 0, "modelName": "gemini
 assert e.pre_invocation(ev) == {"terminationBehavior": "terminate"}         # sinal forte: reenvia já
 assert typed[-1] == ["/effort high", ev["lastUserInput"]], typed
 assert e.pre_invocation(dict(ev, modelName="gemini-4-hydrogen-high")) == {}    # o reenvio não é julgado de novo
+# modo auto: pedido simples não chama o juiz
+common.save("config.json", {"judge": "auto"})
+spawned.clear()
+e.pre_invocation(dict(ev, modelName="gemini-4-hydrogen-high", lastUserInput="qual a versão?"))
+assert not spawned, "regra clara não deve chamar o juiz"
 # juiz em segundo plano: mensagem comum em medium, juiz pede high com o turno rodando -> sobe no meio
-common.save("config.json", {"judge": "flash"})
+common.save("config.json", {"judge": "auto"})
+common.save("judge-run.json", {"t": 0})
 typed.clear(); spawned.clear()
 m = "ajuste a função de parse para aceitar datas no formato brasileiro"
 out = e.pre_invocation(dict(ev, modelName="gemini-4-hydrogen-medium", lastUserInput=m))
 assert out == {} and spawned, "deve disparar o juiz sem bloquear"
+spawned.clear()
+e.pre_invocation(dict(ev, modelName="gemini-4-hydrogen-medium", lastUserInput=m + " por favor"))
+assert not spawned, "dois juízes em menos de judge_gap: o segundo não roda"
+common.save("effortless.json", dict(common.load("effortless.json"), turn=__import__("hashlib").sha1(m.encode()).hexdigest()))
 e.judge = lambda *a, **k: ("high", 0.9, "parsing com casos de borda", False)
 e.run_judge()
 assert typed[-1] == ["/effort high"] and common.load("effortless.json")["raised_mid_turn"]
 # juiz pede menos -> fica para o fim do turno
 typed.clear()
+common.save("judge-run.json", {"t": 0}); common.save("config.json", {"judge": "flash"})   # força o juiz
 e.pre_invocation(dict(ev, modelName="gemini-4-hydrogen-high", lastUserInput="mostra o diff que você fez agora"))
 e.judge = lambda *a, **k: ("low", 0.9, "só mostrar", True)
 common.save("statusline.json", {"context_window": {"used_percentage": 85}})

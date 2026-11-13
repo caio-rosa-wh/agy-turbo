@@ -67,7 +67,7 @@ Restaura a statusline anterior, remove a função `agy` do shell e os comandos, 
 
 ## Limites honestos
 
-- **Juiz Flash:** roda em segundo plano, sem segurar a mensagem, e leva cerca de 7 a 11 s. Quando pede mais esforço, as próximas chamadas daquele turno já sobem. Numa resposta curta, de uma chamada só, o veredito chega tarde e não muda aquela resposta. Pedidos explícitos e sinais claros de tarefa pesada são decididos na hora pelas regras locais.
+- **Juiz Flash:** cada chamada abre um segundo `agy -p`, que custa cerca de 14 s de CPU. Por isso, no modo padrão (`judge auto`), ele só roda quando as regras locais estão em dúvida, nunca dois ao mesmo tempo, no máximo um a cada 20 s e com prioridade baixa. `agy-effortless judge local` desliga o juiz; `judge flash` chama sempre. Roda em segundo plano, sem segurar a mensagem, e leva cerca de 7 a 11 s. Quando pede mais esforço, as próximas chamadas daquele turno já sobem. Numa resposta curta, de uma chamada só, o veredito chega tarde e não muda aquela resposta. Pedidos explícitos e sinais claros de tarefa pesada são decididos na hora pelas regras locais.
 - **Cache:** o agy informa os tokens lidos do cache por chamada, mas não por quanto tempo o cache vale. A contagem é uma estimativa: 5 min para Gemini e 60 min para Claude, ajustável com `AGY_CACHE_TTL_MIN`.
 - **Interface:** o agy não deixa plugins desenharem dentro da TUI dele. Por isso a árvore roda num painel tmux, a troca de esforço digita `/effort` nesse painel, e as respostas usam o renderer nativo, sem cores próprias nos gráficos.
 - **Statusline:** só redesenha quando algo muda na sessão. A barra do effortless também aparece ao vivo no rodapé da árvore.

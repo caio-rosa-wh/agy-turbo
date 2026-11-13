@@ -138,6 +138,9 @@ class GitState:
     ignored: set[str] = field(default_factory=set)
 
 
+_IGNORED: dict[str, tuple[float, set]] = {}
+
+
 def _ancestors(path: str, repo: str):
     d = os.path.dirname(path)
     while len(d) >= len(repo):
@@ -198,10 +201,15 @@ def git_state(root: Path) -> GitState:
                 for d in _ancestors(ab, st.repo):
                     x, y = st.dir_numstat.get(d, (0, 0))
                     st.dir_numstat[d] = (x + int(a), y + int(d_))
-        for rel in run("ls-files", "--others", "--ignored", "--exclude-standard", "--directory", "-z",
-                       timeout=3).stdout.split("\0"):
-            if rel:
-                st.ignored.add(os.path.join(st.repo, rel.rstrip("/")))
+        cached = _IGNORED.get(st.repo)
+        if cached and time.time() - cached[0] < 30:      # lista de ignorados: cara em repo grande, cache de 30 s
+            st.ignored = cached[1]
+        else:
+            for rel in run("ls-files", "--others", "--ignored", "--exclude-standard", "--directory", "-z",
+                           timeout=3).stdout.split("\0"):
+                if rel:
+                    st.ignored.add(os.path.join(st.repo, rel.rstrip("/")))
+            _IGNORED[st.repo] = (time.time(), st.ignored)
     except (OSError, subprocess.TimeoutExpired):
         pass
     return st
@@ -538,7 +546,7 @@ class AgyTree(App):
                 self.offsets[f] = os.path.getsize(f)
             except OSError:
                 self.offsets[f] = 0
-        self.set_interval(0.1, self.tick)
+        self.set_interval(0.1, self.tick)       # barato quando nada mudou; redesenha só com brilho ativo
         self.set_interval(3.0, self.refresh_git)
         self.set_interval(1.0, self.update_effbar)
         self.update_effbar()
@@ -703,7 +711,10 @@ class AgyTree(App):
         old = [k for k, (_, ts) in self.activity.items() if now - ts > GLOW]
         for k in old:
             del self.activity[k]
-        if changed or old or self.activity:
+        shimmering = any(now - ts < SHIMMER for _, ts in self.activity.values())
+        self._ticks = getattr(self, "_ticks", 0) + 1
+        # 10 quadros/s só durante a onda de cor; com marcas paradas, 1 quadro/s
+        if changed or old or shimmering or (self.activity and self._ticks % 10 == 0):
             self.redraw()
 
     # ---------- cabeçalho e rodapé ----------

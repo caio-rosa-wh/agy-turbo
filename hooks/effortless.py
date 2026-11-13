@@ -30,7 +30,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import common  # noqa: E402
 
 LEVELS = common.LEVELS
-DEFAULTS = {"auto": True, "judge": "flash", "judge_model": "gemini-3.8-flash-low", "judge_timeout": 20,
+DEFAULTS = {"auto": True, "judge": "auto", "judge_gap": 20, "judge_nice": 15, "judge_model": "gemini-3.8-flash-low", "judge_timeout": 20,
             "floor": "low", "ceiling": "max", "bias": 0, "economy": False, "resubmit": True,
             "compact": "auto", "compact_at": 80, "handoff": "suggest", "handoff_at": 40}
 CONTINUE = {"ok", "okay", "sim", "s", "yes", "y", "go", "segue", "seguir", "continua", "continue", "pode",
@@ -114,21 +114,21 @@ def context_pct():
 
 # ---------- decisão local (instantânea) ----------
 def local(msg, current, levels, c):
-    """(nível, motivo, forte). forte = agir já sem esperar o juiz."""
+    """(nível, motivo, forte, seguro). forte = agir já; seguro = regra clara, o juiz no modo auto não é chamado."""
     low = msg.strip().lower()
     for pat, lvl in EXPLICIT:
         if re.search(pat, low):
-            return clamp(lvl, levels), "você pediu " + lvl, True
+            return clamp(lvl, levels), "você pediu " + lvl, True, True
     words = re.findall(r"[\wà-ú]+", low)
     if current and words and len(words) <= 4 and all(w in CONTINUE for w in words):
-        return current, "continuação: mantém", False
+        return current, "continuação: mantém", False, True
     if HEAVY.search(msg) or len(words) > 120:
         lvl = limits("high", levels, c)
         strong = current == "low" and LEVELS.index(lvl) > LEVELS.index(current)
-        return lvl, "tarefa pesada", strong
+        return lvl, "tarefa pesada", strong, strong
     if LIGHT.search(msg.strip()) or len(words) <= 8:
-        return limits("low", levels, c), "pedido simples", False
-    return limits("medium", levels, c), "tarefa comum", False
+        return limits("low", levels, c), "pedido simples", False, len(words) <= 8
+    return limits("medium", levels, c), "tarefa comum", False, False
 
 
 # ---------- juiz LLM (em segundo plano) ----------
@@ -231,7 +231,7 @@ def pre_invocation(ev):
     if not c["auto"] or not msg.strip() or msg.lstrip().startswith("/") or not current:
         common.save("effortless.json", state)
         return {}
-    lvl, why, strong = local(msg, current, levels, c)
+    lvl, why, strong, sure = local(msg, current, levels, c)
     state.update({"decided": lvl, "reason": why, "source": "local", "t": time.time(), "pending": None,
                   "turn": h, "turn_active": True, "judge": None, "raised_mid_turn": False})
     if state.get("hint") == "handoff":
@@ -257,8 +257,12 @@ def pre_invocation(ev):
     else:
         state.pop("suggest", None)
     common.save("effortless.json", state)
-    # juiz em segundo plano: não segura a mensagem (e não roda quando já vamos reenviar)
-    if not out and c["judge"] == "flash" and not strong:
+    # juiz em segundo plano: não segura a mensagem. "auto" só chama quando as regras estão em dúvida;
+    # nunca dois ao mesmo tempo e no máximo um a cada judge_gap segundos (cada `agy -p` custa ~14 s de CPU)
+    busy = time.time() - (common.load("judge-run.json").get("t") or 0) < max(int(c["judge_gap"]), 1)
+    wanted = c["judge"] == "flash" or (c["judge"] == "auto" and not sure)
+    if not out and wanted and not strong and not busy:
+        common.save("judge-run.json", {"t": time.time()})
         common.save("judge-job.json", {"msg": msg, "current": current, "levels": levels, "turn": h,
                                        "transcript": ev.get("transcriptPath") or "", "pane": target})
         subprocess.Popen([sys.executable, "-I", os.path.abspath(__file__), "--judge"], stdin=subprocess.DEVNULL,
@@ -271,6 +275,10 @@ def run_judge():
     job = common.load("judge-job.json")
     if not job:
         return
+    try:
+        os.nice(int(cfg().get("judge_nice") or 0))   # cede a CPU ao agy principal
+    except (OSError, ValueError):
+        pass
     c = cfg()
     t0 = time.time()
     v = judge(job["msg"], job["current"], job["levels"], last_reply(job["transcript"]), context_pct(), c)

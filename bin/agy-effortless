@@ -3,7 +3,7 @@
 
   agy-effortless                 status
   agy-effortless on|off          seleção automática de esforço
-  agy-effortless judge flash|local
+  agy-effortless judge auto|flash|local   auto (padrão): Flash só quando as regras locais estão em dúvida
   agy-effortless floor|ceiling low|medium|high|xhigh|max
   agy-effortless bias -2..2      empurra decisões incertas para baixo/cima
   agy-effortless economy on|off  nunca acima de medium
@@ -33,7 +33,7 @@ try:
         pass
     elif a[0] in onoff:
         c["auto"] = onoff[a[0]]
-    elif a[0] == "judge" and a[1] in ("flash", "local"):
+    elif a[0] == "judge" and a[1] in ("auto", "flash", "local"):
         c["judge"] = a[1]
     elif a[0] in ("floor", "ceiling") and a[1] in LEVELS:
         c[a[0]] = a[1]
@@ -54,7 +54,7 @@ except IndexError:
 if a and a[0] != "status":
     save(c)
 st = load(os.path.join(DATA, "effortless.json"))
-eff = {"auto": True, "judge": "flash", "floor": "low", "ceiling": "max", "bias": 0, "economy": False, "resubmit": True,
+eff = {"auto": True, "judge": "auto", "floor": "low", "ceiling": "max", "bias": 0, "economy": False, "resubmit": True,
        "compact": "auto", "compact_at": 80, "handoff": "suggest", "handoff_at": 40}
 eff.update(c)
 print("effortless: " + ("auto" if eff["auto"] else "desligado") + f" · juiz {eff['judge']} · piso {eff['floor']} · "
