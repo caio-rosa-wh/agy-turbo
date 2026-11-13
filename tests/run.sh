@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+# Testes offline: statusline com payload real e casos de borda, instalador numa cópia do settings, validate dos plugins.
+set -u
+DIR=$(cd "$(dirname "$0")/.." && pwd); SL=$DIR/statusline/statusline.sh
+FIX=$DIR/docs/evidencias/statusline-stdin-agy-1.5.7.json
+fail=0; ok() { echo "ok   $1"; }; ko() { echo "FAIL $1"; fail=1; }
+strip() { sed -E 's/\x1b\[[0-9;]*m//g'; }
+
+out=$(jq '.context_window.total_input_tokens=158000|.context_window.used_percentage=16|.cost=2.48|.terminal_width=110|.quota["gemini-5h"].remaining_fraction=0.74|.quota["gemini-weekly"].remaining_fraction=0.55' "$FIX" | "$SL" | strip)
+l1=$(sed -n 1p <<<"$out"); l2=$(sed -n 2p <<<"$out")
+[[ $l1 == *"Gemini 4 Hydrogen "* && $l1 != *"(High)"* ]] && ok "modelo sem sufixo" || ko "modelo: $l1"
+[[ $l1 == *"| high"* ]] && ok "esforço" || ko "esforço: $l1"
+[[ $l1 == *"tok 158k/1M (16%)"* ]] && ok "tokens compactos com ponto" || ko "tokens: $l1"
+[[ $l1 == *'$2.48'* ]] && ok "custo" || ko "custo: $l1"
+[[ $l2 == *"5h"*"26%"*"7d"*"45%"* ]] && ok "cotas gemini" || ko "cotas: $l2"
+out=$(jq '.model.display_name="Claude Sonnet 5.5 (Thinking)"|.quota["3p-5h"].remaining_fraction=0.1' "$FIX" | "$SL" | strip)
+[[ $(sed -n 2p <<<"$out") == *" 90%"* ]] && ok "cota 3p para Claude" || ko "3p: $out"
+[[ $(echo '{}' | "$SL" | strip) == *"tok 0/0"* ]] && ok "JSON vazio" || ko "JSON vazio"
+[[ $(echo 'xx' | "$SL") == *"JSON inválido"* ]] && ok "JSON inválido" || ko "JSON inválido"
+[[ $(jq '.terminal_width=60' "$FIX" | NO_COLOR=1 "$SL") != *$'\033'* ]] && ok "NO_COLOR" || ko "NO_COLOR"
+
+T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
+echo '{"statusLine":{"type":"command","command":"/antigo.sh"},"x":1}' > "$T/settings.json"
+AGY_SETTINGS=$T/settings.json "$DIR/statusline/install.sh" >/dev/null
+[[ $(jq -r .statusLine.command "$T/settings.json") == "$SL" ]] && ok "install aponta para statusline.sh" || ko "install"
+AGY_SETTINGS=$T/settings.json "$DIR/statusline/uninstall.sh" >/dev/null
+[[ $(jq -c . "$T/settings.json") == '{"statusLine":{"type":"command","command":"/antigo.sh"},"x":1}' ]] && ok "uninstall restaura" || ko "uninstall"
+
+if command -v agy >/dev/null; then
+  for p in "$DIR"/plugins/*/; do
+    agy plugin validate "$p" --strict >/dev/null 2>&1 && ok "validate $(basename "$p")" || ko "validate $(basename "$p")"
+  done
+else echo "skip validate (agy ausente)"; fi
+exit $fail
