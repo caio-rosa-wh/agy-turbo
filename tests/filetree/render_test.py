@@ -12,15 +12,21 @@ async def main():
     act = os.path.join(root, ".act.jsonl"); open(act, "w").close()
     app = agy_tree.AgyTree(agy_tree.Path(root), act)
     async with app.run_test(size=(70, 20)) as pilot:
-        await pilot.pause(1.0)
         lines = lambda: "\n".join(app.tree.render_line(y).text for y in range(app.tree.size.height))
+        for _ in range(30):                      # o git status roda em thread: espera aparecer
+            await pilot.pause(0.1)
+            if any("README.md" in l and "?" in l for l in lines().splitlines()):
+                break
         readme = next(l for l in lines().splitlines() if "README.md" in l)
         assert " ? " in readme or readme.rstrip().endswith("?") or "?  " in readme, lines()
         assert "a.py" not in lines()
         with open(act, "a") as f:
             f.write(json.dumps({"t": time.time(), "kind": "write", "paths": [os.path.join(root, "src/deep/a.py")], "cwd": root}) + "\n")
             f.write(json.dumps({"t": time.time(), "kind": "cmd", "paths": [], "cmd": "pytest -q", "cwd": root}) + "\n")
-        await pilot.pause(0.8)
+        for _ in range(30):                      # espera até 3 s em vez de um tempo fixo (máquinas lentas)
+            await pilot.pause(0.1)
+            if "a.py" in lines() and "pytest -q" in app.last_cmd:
+                break
         assert "a.py" in lines(), "seguir o agente devia abrir src/deep"
         assert "a.py" in str(app.activity) or any(k.endswith("a.py") for k in app.activity)
         assert "pytest -q" in app.last_cmd

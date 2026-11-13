@@ -1,7 +1,7 @@
 {
   "name": "agy-turbo",
   "displayName": "agy-turbo",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "description": "Statusline, file tree beside the agent, reply formatting with charts, and automatic reasoning effort (effortless) for the Antigravity CLI.",
   "author": {
     "name": "agy-turbo"
