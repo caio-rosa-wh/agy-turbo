@@ -3,4 +3,5 @@
 DIR=$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)
 PY=${AGY_TURBO_VENV:-$HOME/.local/share/agy-turbo/venv}/bin/python
 [ -x "$PY" ] || { echo "agy-tree: rode $DIR/filetree/install.sh primeiro" >&2; exit 1; }
+printf '\033]2;agy-tree\033\\' 2>/dev/null
 exec "$PY" "$DIR/filetree/agy_tree.py" "$@"

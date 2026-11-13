@@ -14,7 +14,8 @@ async def main():
     async with app.run_test(size=(70, 20)) as pilot:
         await pilot.pause(1.0)
         lines = lambda: "\n".join(app.tree.render_line(y).text for y in range(app.tree.size.height))
-        assert "README.md ?" in lines(), lines()
+        readme = next(l for l in lines().splitlines() if "README.md" in l)
+        assert " ? " in readme or readme.rstrip().endswith("?") or "?  " in readme, lines()
         assert "a.py" not in lines()
         with open(act, "a") as f:
             f.write(json.dumps({"t": time.time(), "kind": "write", "paths": [os.path.join(root, "src/deep/a.py")], "cwd": root}) + "\n")

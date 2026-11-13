@@ -1,6 +1,6 @@
 {
   "name": "filetree",
   "displayName": "Filetree (agy-turbo)",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Records which files the agent reads and writes, for the agy-turbo file tree pane."
 }

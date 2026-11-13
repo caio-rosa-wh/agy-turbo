@@ -23,6 +23,10 @@ O agy não tem painel lateral para plugins, então o filetree tem duas partes:
 1. **Plugin `plugins/filetree`:** um hook `PostToolUse` (`hooks/collect.py`, cerca de 17 ms, só biblioteca padrão) grava em `activity.jsonl` cada arquivo lido (`read_file`, `cat`, `grep`…), escrito (`write_file`, `edit_file`, `rm`, `>`…) ou tocado por `git`, além do último comando.
 2. **App `agy-tree`:** uma TUI em Python/[Textual](https://textual.textualize.io/) que roda ao lado do agy. Lê o `activity.jsonl` e o `git status`.
 
+## Abrir sozinho no tmux
+
+Com o `agy` rodando dentro do tmux, o plugin abre a árvore à direita na primeira mensagem da sessão, uma vez por janela (hook `SessionStart`). Não é preciso usar o `agy-turbo`. Para desligar, use `AGY_TREE=0`; para mudar a largura, `AGY_TREE_WIDTH=40%`.
+
 ## Instalar e usar
 
 ```bash
