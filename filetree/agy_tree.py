@@ -597,18 +597,18 @@ class AgyTree(App):
         t.append(f" · {pct:.0f}% context", style=C["del"] if pct >= 80 else C["M"] if pct >= 70 else C["fg"])
         auto = cf.get("auto", True)
         t.append("   ")
-        t.append("[auto]" if auto else "[off]", style=f"bold {C['read']}" if auto else C["muted"])
-        if pct >= 80:
-            t.append("  /compact", style=C["M"])
-        elif st.get("handoff") or pct >= 70:
-            t.append("  /handoff", style=C["M"])
+        t.append("auto" if auto else "manual", style=f"bold {C['read']}" if auto else C["muted"])
+        hint = {"compacting": "compactando…", "compact": "contexto cheio: /compact",
+                "handoff": "assunto novo: /handoff"}.get(st.get("hint") or "")
+        if hint:
+            t.append("  " + hint, style=C["M"])
         gauge = Text()
         for lvl in st.get("levels") or ["low", "medium", "high"]:
             gauge.append(f"[{lvl}] " if lvl == cur else f"{lvl} ", style=f"bold {C['read']}" if lvl == cur else C["muted"])
         if st.get("pending"):
-            gauge.append(f"↓ {st['pending']} no fim  ", style=C["muted"])
+            gauge.append(f"→ {st['pending']} depois desta resposta  ", style=C["muted"])
         if st.get("reason") and auto:
-            gauge.append(str(st["reason"])[:70], style=C["muted"])
+            gauge.append(str(st["reason"])[:60], style=C["muted"])
         t.append("\n")
         t.append_text(gauge)
         bar.update(t)

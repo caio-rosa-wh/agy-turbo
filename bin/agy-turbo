@@ -24,7 +24,7 @@ if command -v tmux >/dev/null 2>&1; then
     set-option -t "$S" status off \; \
     set-option -t "$S" pane-border-style "fg=#3b4261" \; \
     set-option -t "$S" pane-active-border-style "fg=#3b4261" \; \
-    select-pane -L
+    select-pane -t "$S:0.0"
 fi
 if command -v ptyxis >/dev/null 2>&1; then
   ptyxis --new-window -d "$PWD" -T "agy-tree" -x "$tree" >/dev/null 2>&1 &

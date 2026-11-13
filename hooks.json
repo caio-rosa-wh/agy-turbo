@@ -3,7 +3,7 @@
     "SessionStart": [ { "type": "command", "command": "python3 -I ./hooks/session_start.py", "timeout": 10 } ]
   },
   "agy-turbo-effortless": {
-    "PreInvocation": [ { "type": "command", "command": "python3 -I ./hooks/effortless.py", "timeout": 30 } ],
+    "PreInvocation": [ { "type": "command", "command": "python3 -I ./hooks/effortless.py", "timeout": 10 } ],
     "Stop": [ { "type": "command", "command": "python3 -I ./hooks/effortless.py", "timeout": 5 } ]
   },
   "agy-turbo-filetree": {

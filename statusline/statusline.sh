@@ -136,7 +136,7 @@ if [ -z "${COCKPIT_NO_EFFORTLESS:-}" ]; then
     last=$(tail -n 60 "$transcript" 2>/dev/null | jq -rs '[.[] | select(.type=="PLANNER_RESPONSE")] | last
       | if . then "\(.created_at | sub("\\.[0-9]+";"") | fromdateiso8601)\t\(.cache_read_tokens // 0)" else empty end' 2>/dev/null)
   fi
-  IFS=$'\t' read -r e_lvl e_levels e_auto e_reason e_pending e_suggest e_handoff n_text < <(
+  IFS=$'\t' read -r e_lvl e_levels e_auto e_reason e_pending e_suggest e_handoff n_text e_hint < <(
     jq -rn --slurpfile st <(cat "$DATA/effortless.json" 2>/dev/null || echo '{}') \
           --slurpfile cf <(cat "$DATA/config.json" 2>/dev/null || echo '{}') \
           --slurpfile nt <(cat "$DATA/notice.json" 2>/dev/null || echo '{}') \
@@ -148,10 +148,11 @@ if [ -z "${COCKPIT_NO_EFFORTLESS:-}" ]; then
         ($s.reason // ""),
         ($s.pending // ""),
         ($s.suggest // ""),
-        (if ($s.handoff // false) then "1" else "" end),
-        (if (($n.t // 0) > (now - 3600)) then ($n.text // "") else "" end)
+        "",
+        (if (($n.t // 0) > (now - 600)) then ($n.text // "") else "" end),
+        ($s.hint // "")
       ] | map(if . == "" then "-" else . end) | @tsv' 2>/dev/null)
-  for v in e_lvl e_levels e_auto e_reason e_pending e_suggest e_handoff n_text; do [ "${!v:-}" = "-" ] && printf -v "$v" ''; done
+  for v in e_lvl e_levels e_auto e_reason e_pending e_suggest e_handoff n_text e_hint; do [ "${!v:-}" = "-" ] && printf -v "$v" ''; done
   ACC='38;2;187;154;247'
   seg="$(c "$ACC")✦$R $(c "1")${e_lvl:-?}$R"
   if [ -n "$last" ]; then
@@ -174,16 +175,19 @@ if [ -z "${COCKPIT_NO_EFFORTLESS:-}" ]; then
     if [ "$l" = "$e_lvl" ]; then gauge+=" $(c "1;$ACC")[ $l ]$R"; else gauge+=" $(c "$DIM")$l$R"; fi
   done
   tail=""
-  if [ "$e_auto" = "off" ]; then tail="$(c "$DIM")effortless off$R"
+  if [ "$e_auto" = "off" ]; then tail="$(c "$DIM")esforço manual (agy-effortless on)$R"
   else
     tail="$(c "$ACC")auto$R"
-    [ -n "$e_pending" ] && tail+=" $(c "$DIM")↓ $e_pending no fim do turno$R"
-    [ -n "$e_suggest" ] && tail+=" $(c "$WARN")→ /effort $e_suggest$R"
-    [ -n "$e_reason" ] && tail+=" $(c "$DIM")· ${e_reason:0:60}$R"
+    [ -n "$e_reason" ] && tail+="$(c "$DIM"): ${e_reason:0:50}$R"
+    [ -n "$e_pending" ] && tail+=" $(c "$DIM")· depois desta resposta → $e_pending$R"
+    [ -n "$e_suggest" ] && tail+=" $(c "$WARN")· sugestão: /effort $e_suggest$R"
   fi
   hint=""
-  if [ "${pct:-0}" -ge 80 ] 2>/dev/null; then hint=" $(c "$WARN")· /compact$R"
-  elif [ -n "$e_handoff" ] || [ "${pct:-0}" -ge 70 ] 2>/dev/null; then hint=" $(c "$WARN")· /handoff?$R"; fi
+  case "$e_hint" in
+    compacting) hint=" $(c "$WARN")· compactando…$R" ;;
+    compact) hint=" $(c "$WARN")· contexto cheio: /compact$R" ;;
+    handoff) hint=" $(c "$WARN")· assunto novo: /handoff$R" ;;
+  esac
   line3=" $seg  $gauge   $tail$hint"
   [ -n "$n_text" ] && line3+=$'\n'" $(c "1;$ACC")$n_text$R"
 fi

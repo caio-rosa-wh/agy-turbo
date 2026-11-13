@@ -8,6 +8,9 @@
   agy-effortless bias -2..2      empurra decisões incertas para baixo/cima
   agy-effortless economy on|off  nunca acima de medium
   agy-effortless resubmit on|off subir esforço reenviando a mensagem (vale já)
+  agy-effortless compact auto|suggest|off   compactar sozinho no fim do turno quando o contexto enche
+  agy-effortless compact-at 80             % de contexto para compactar
+  agy-effortless handoff suggest|auto|off  troca de assunto com contexto grande
   agy-effortless reset           volta ao padrão
 """
 import json, os, sys
@@ -38,6 +41,10 @@ try:
         c["bias"] = int(a[1])
     elif a[0] in ("economy", "resubmit") and a[1] in onoff:
         c[a[0]] = onoff[a[1]]
+    elif a[0] in ("compact", "handoff") and a[1] in ("auto", "suggest", "off"):
+        c[a[0]] = a[1]
+    elif a[0] in ("compact-at", "handoff-at") and a[1].isdigit() and 10 <= int(a[1]) <= 95:
+        c[a[0].replace("-", "_")] = int(a[1])
     elif a[0] == "reset":
         c = {}
     else:
@@ -47,10 +54,16 @@ except IndexError:
 if a and a[0] != "status":
     save(c)
 st = load(os.path.join(DATA, "effortless.json"))
-eff = {"auto": True, "judge": "flash", "floor": "low", "ceiling": "max", "bias": 0, "economy": False, "resubmit": True}
+eff = {"auto": True, "judge": "flash", "floor": "low", "ceiling": "max", "bias": 0, "economy": False, "resubmit": True,
+       "compact": "auto", "compact_at": 80, "handoff": "suggest", "handoff_at": 40}
 eff.update(c)
 print("effortless: " + ("auto" if eff["auto"] else "desligado") + f" · juiz {eff['judge']} · piso {eff['floor']} · "
       f"teto {eff['ceiling']} · viés {eff['bias']} · economia {'on' if eff['economy'] else 'off'} · "
-      f"reenviar {'on' if eff['resubmit'] else 'off'}")
+      f"reenviar {'on' if eff['resubmit'] else 'off'}\n"
+      f"compact {eff['compact']} a {eff['compact_at']}% · handoff {eff['handoff']} a partir de {eff['handoff_at']}%")
+j = st.get("judge") or {}
+if j:
+    print("juiz: " + (f"{j.get('effort')} em {j.get('ms', 0) / 1000:.1f}s ({j.get('reason', '')})" if j.get("ok")
+                      else f"sem resposta ({j.get('ms', 0) / 1000:.1f}s)"))
 if st.get("decided"):
     print(f"última decisão: {st.get('current')} -> {st['decided']} ({st.get('reason', '')})")

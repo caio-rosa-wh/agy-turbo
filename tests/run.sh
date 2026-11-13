@@ -42,8 +42,9 @@ else echo "skip agy-tree (venv ausente)"; fi
 
 python3 -I "$DIR/tests/effortless_test.py" "$DIR" && ok "effortless: decisões e aplicação via tmux" || ko "effortless"
 python3 -I "$DIR/tests/bootstrap_test.py" "$DIR" && ok "bootstrap: HOME limpo, idempotente" || ko "bootstrap"
-o=$(jq '.terminal_width=150|.context_window.used_percentage=72' "$FIX" | AGY_TURBO_DATA=$(mktemp -d) "$SL" | strip | sed -n 3p)
-[[ $o == *"72% context"*"[ high ]"*"/handoff?"* ]] && ok "statusline: linha do effortless" || ko "statusline effortless: $o"
+TD=$(mktemp -d); echo '{"hint":"compact","pending":"low","reason":"só mostrar"}' > "$TD/effortless.json"
+o=$(jq '.terminal_width=150|.context_window.used_percentage=85' "$FIX" | AGY_TURBO_DATA=$TD "$SL" | strip | sed -n 3p); rm -rf "$TD"
+[[ $o == *"85% context"*"[ high ]"*"auto: só mostrar"*"depois desta resposta → low"*"contexto cheio: /compact"* ]] && ok "statusline: linha do effortless" || ko "statusline effortless: $o"
 
 if command -v agy >/dev/null; then
   agy plugin validate "$DIR" --strict >/dev/null 2>&1 && ok "validate agy-turbo" || ko "validate agy-turbo"

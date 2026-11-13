@@ -1,47 +1,71 @@
-"""Testes do effortless sem modelo nem tmux reais: juiz local, tmux simulado."""
-import json, os, sys, tempfile
+"""Testes do effortless sem modelo nem tmux reais: regras locais, juiz simulado, tmux simulado."""
+import io, json, os, sys, tempfile
 root = sys.argv[1]
 data = tempfile.mkdtemp()
 os.environ["AGY_TURBO_DATA"] = data
 os.environ.pop("PLUGIN_DATA", None)
 sys.path.insert(0, os.path.join(root, "hooks"))
-import common, effortless  # noqa: E402
+import common, effortless as e  # noqa: E402
 common.DATA = data
 common.save("config.json", {"judge": "local"})
 common.save("models.json", {"levels": {"gemini-4-hydrogen": ["low", "medium", "high", "xhigh"]}})
 typed = []
-effortless.tmux_type = lambda pane, *items, delay=0.0: typed.append(items)
-c = effortless.cfg()
+e.tmux_type = lambda pane, *items, delay=0.0: typed.append([v for k, v in items if k == "keys"])
+spawned = []
+e.subprocess.Popen = lambda *a, **k: spawned.append(a)
 L = ["low", "medium", "high", "xhigh"]
-assert effortless.decide("max effort, revise tudo", "low", L, {}, c)[0] == "xhigh"   # max não existe: o mais próximo
-assert effortless.decide("use esforço alto aqui", "low", L, {}, c)[0] == "high"
-assert effortless.decide("ok, pode", "high", L, {}, c)[:1] == ("high",)
-assert effortless.decide("investigue o deadlock na fila de produção", "low", L, {}, c)[0] == "high"
-assert effortless.decide("quantos arquivos tem?", "high", L, {}, c)[0] == "low"
-common.save("config.json", {"judge": "local", "economy": True})
-assert effortless.decide("refatore a arquitetura", "low", L, {}, effortless.cfg())[0] == "medium"
-common.save("config.json", {"judge": "local", "floor": "medium"})
-assert effortless.decide("oi", "high", L, {}, effortless.cfg())[0] == "medium"
-common.save("config.json", {"judge": "local"})
+c = e.cfg()
+# regras locais
+assert e.local("max effort, revise tudo", "low", L, c)[::2] == ("xhigh", True)
+assert e.local("ok, pode", "high", L, c)[0] == "high"
+assert e.local("investigue o deadlock na fila", "low", L, c) == ("high", "tarefa pesada", True)
+assert e.local("investigue o deadlock na fila", "medium", L, c)[2] is False
+assert e.local("quantos arquivos tem?", "high", L, c)[0] == "low"
+assert e.limits("high", L, dict(c, economy=True)) == "medium"
+assert e.limits("low", L, dict(c, floor="medium")) == "medium"
+# parser com a saída real do agy -p (dois objetos JSON e structured_output)
+real = ('{"status":"SUCCESS","response":"{\\"effort\\": \\"low\\"}\\n{\\"confidence\\":1,\\"effort\\":\\"low\\",'
+        '\\"reason\\":\\"x\\"}\\n","structured_output":{"effort":"high","confidence":0.8,"reason":"r"}}')
+assert e.parse_verdict(real, L)[:2] == ("high", 0.8)
+assert e.parse_verdict('{"response":"bla {\\"effort\\":\\"medium\\",\\"confidence\\":0.9}"}', L)[0] == "medium"
+assert e.parse_verdict("lixo", L) is None
 
 os.environ["TMUX"], os.environ["TMUX_PANE"] = "/tmp/x", "%7"
 ev = {"hookEventName": "PreInvocation", "invocationNum": 0, "modelName": "gemini-4-hydrogen-low",
       "lastUserInput": "investigue a race condition no worker"}
-out = effortless.pre_invocation(ev)
-assert out == {"terminationBehavior": "terminate"}, out           # subir: reenvia e encerra
-flat = [v for items in typed for k, v in items if k == "keys"]
-assert flat[0] == "/effort high" and flat[1] == ev["lastUserInput"], flat
-assert effortless.pre_invocation(dict(ev, modelName="gemini-4-hydrogen-high")) == {}   # reenvio não é julgado de novo
+assert e.pre_invocation(ev) == {"terminationBehavior": "terminate"}         # sinal forte: reenvia já
+assert typed[-1] == ["/effort high", ev["lastUserInput"]], typed
+assert e.pre_invocation(dict(ev, modelName="gemini-4-hydrogen-high")) == {}    # o reenvio não é julgado de novo
+# juiz em segundo plano: mensagem comum em medium, juiz pede high com o turno rodando -> sobe no meio
+common.save("config.json", {"judge": "flash"})
+typed.clear(); spawned.clear()
+m = "ajuste a função de parse para aceitar datas no formato brasileiro"
+out = e.pre_invocation(dict(ev, modelName="gemini-4-hydrogen-medium", lastUserInput=m))
+assert out == {} and spawned, "deve disparar o juiz sem bloquear"
+e.judge = lambda *a, **k: ("high", 0.9, "parsing com casos de borda", False)
+e.run_judge()
+assert typed[-1] == ["/effort high"] and common.load("effortless.json")["raised_mid_turn"]
+# juiz pede menos -> fica para o fim do turno
 typed.clear()
-out = effortless.pre_invocation(dict(ev, modelName="gemini-4-hydrogen-high", lastUserInput="qual a versão?"))
-assert out == {} and not typed and common.load("effortless.json")["pending"] == "low"  # descer espera o fim
-effortless.stop({"hookEventName": "Stop", "terminationReason": "NO_TOOL_CALL"})
-assert [v for k, v in typed[0] if k == "keys"] == ["/effort low"], typed
-assert effortless.pre_invocation(dict(ev, invocationNum=2)) == {}                    # só a 1ª chamada
+e.pre_invocation(dict(ev, modelName="gemini-4-hydrogen-high", lastUserInput="mostra o diff que você fez agora"))
+e.judge = lambda *a, **k: ("low", 0.9, "só mostrar", True)
+common.save("statusline.json", {"context_window": {"used_percentage": 85}})
+e.run_judge()
+st = common.load("effortless.json")
+assert st["pending"] == "low" and st["hint"] == "handoff" and not typed
+e.stop({"hookEventName": "Stop", "terminationReason": "NO_TOOL_CALL"})                 # fim: desce e compacta
+assert typed[-1] == ["/effort low", "/compact"], typed
+typed.clear()
+e.stop({"hookEventName": "Stop", "terminationReason": "NO_TOOL_CALL"})
+assert not typed, "não compacta de novo em seguida"
+assert e.pre_invocation(dict(ev, invocationNum=2)) == {}
+# sem tmux: só sugere
 del os.environ["TMUX"]
+common.save("config.json", {"judge": "local"})
 typed.clear()
-effortless.pre_invocation(dict(ev, lastUserInput="analise a performance do banco", modelName="gemini-4-hydrogen-low"))
-assert not typed and common.load("effortless.json")["suggest"] == "high"               # sem tmux: só sugere
+e.pre_invocation(dict(ev, lastUserInput="analise a performance do banco", modelName="gemini-4-hydrogen-low"))
+assert not typed and common.load("effortless.json")["suggest"] == "high"
 os.environ["AGY_TURBO_JUDGE"] = "1"
-assert effortless.main() == {}
+sys.stdin = io.StringIO("{}")
+assert e.main() == {}
 print("ok")

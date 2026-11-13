@@ -1,15 +1,18 @@
-"""effortless para o agy: escolhe o esforço de raciocínio de cada mensagem e troca sozinho.
+"""effortless para o agy: esforço automático, compact e handoff, sem travar suas mensagens.
 
-Inspirado no HeyCubit/effortless (MIT), reimplementado para os hooks do agy:
-  PreInvocation (1ª chamada de cada mensagem): decide o nível.
-    - pedido explícito ("max effort", "esforço alto")      -> esse nível
-    - continuação curta ("ok", "segue", "pode")            -> mantém
-    - senão: juiz LLM (Flash via `agy -p`, saída JSON)     -> nível + confiança + motivo
-    - confiança < 0.5 mantém; aplica viés, piso, teto e modo economia
-  Aplicar (precisa do agy rodando no tmux, que é como o agy-turbo abre):
-    - subir: digita `/effort X`, reenvia a mensagem e encerra a chamada atual (vale já)
-    - descer: guarda e digita `/effort X` no fim do turno (Stop), sem enfraquecer o trabalho em andamento
-  Sem tmux: só mostra a sugestão na statusline.
+Inspirado no HeyCubit/effortless (MIT), reimplementado para os hooks do agy.
+
+Fluxo (o agy roda no tmux, que é como o agy-turbo abre; sem tmux só há sugestões na statusline):
+  Você envia (PreInvocation, 1ª chamada)  -> regras locais, na hora (0 s):
+      pedido explícito ("max effort", "esforço alto") ou sinal claro de tarefa pesada com esforço baixo
+      -> sobe já: digita `/effort X`, reenvia a mensagem e encerra esta chamada.
+      continuação curta ("ok", "segue") -> mantém.
+  Em paralelo, o juiz LLM (Flash via `agy -p`) avalia a mensagem em segundo plano:
+      pede mais esforço e o turno ainda roda -> digita `/effort X`: as próximas chamadas do turno já sobem.
+      pede menos -> fica para o fim do turno.     troca de assunto com contexto grande -> recomenda /handoff.
+  Fim do turno (Stop):
+      desce o esforço pendente; contexto >= compact_at com compact=auto -> digita `/compact`;
+      handoff recomendado -> aviso na statusline (handoff=auto digita /handoff).
 
 Estado em effortless.json; configuração em config.json (agy-effortless).
 """
@@ -27,8 +30,9 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import common  # noqa: E402
 
 LEVELS = common.LEVELS
-DEFAULTS = {"auto": True, "judge": "flash", "judge_model": "gemini-3.8-flash-low", "floor": "low",
-            "ceiling": "max", "bias": 0, "economy": False, "resubmit": True, "judge_timeout": 15}
+DEFAULTS = {"auto": True, "judge": "flash", "judge_model": "gemini-3.8-flash-low", "judge_timeout": 20,
+            "floor": "low", "ceiling": "max", "bias": 0, "economy": False, "resubmit": True,
+            "compact": "auto", "compact_at": 80, "handoff": "suggest", "handoff_at": 40}
 CONTINUE = {"ok", "okay", "sim", "s", "yes", "y", "go", "segue", "seguir", "continua", "continue", "pode",
             "manda", "vai", "beleza", "blz", "isso", "certo", "faz", "faça", "bora", "next", "proceed", "valeu",
             "obrigado", "thanks", "perfeito", "show", "top"}
@@ -71,8 +75,18 @@ def clamp(level, levels):
     return min(levels, key=lambda l: abs(LEVELS.index(l) - i))
 
 
+def limits(level, levels, c, conf=1.0):
+    i = LEVELS.index(level)
+    bias = int(c.get("bias") or 0)
+    if bias and conf < (0.65 if abs(bias) == 1 else 0.85):
+        i += 1 if bias > 0 else -1
+    i = max(LEVELS.index(c["floor"]), min(LEVELS.index(c["ceiling"]), i))
+    if c.get("economy"):
+        i = min(i, LEVELS.index("medium"))
+    return clamp(LEVELS[max(0, min(i, len(LEVELS) - 1))], levels)
+
+
 def last_reply(transcript):
-    """Últimos ~1500 caracteres da última resposta do modelo no transcript do agy."""
     try:
         with open(transcript, "rb") as f:
             f.seek(0, 2)
@@ -98,115 +112,106 @@ def context_pct():
         return 0.0
 
 
-def local_verdict(msg, current):
-    words = len(msg.split())
-    if HEAVY.search(msg) or words > 120:
-        return "high", 0.6, "local: tarefa pesada"
-    if LIGHT.search(msg.strip()) or words <= 8:
-        return "low", 0.6, "local: pedido simples"
-    return "medium", 0.55, "local: tarefa comum"
+# ---------- decisão local (instantânea) ----------
+def local(msg, current, levels, c):
+    """(nível, motivo, forte). forte = agir já sem esperar o juiz."""
+    low = msg.strip().lower()
+    for pat, lvl in EXPLICIT:
+        if re.search(pat, low):
+            return clamp(lvl, levels), "você pediu " + lvl, True
+    words = re.findall(r"[\wà-ú]+", low)
+    if current and words and len(words) <= 4 and all(w in CONTINUE for w in words):
+        return current, "continuação: mantém", False
+    if HEAVY.search(msg) or len(words) > 120:
+        lvl = limits("high", levels, c)
+        strong = current == "low" and LEVELS.index(lvl) > LEVELS.index(current)
+        return lvl, "tarefa pesada", strong
+    if LIGHT.search(msg.strip()) or len(words) <= 8:
+        return limits("low", levels, c), "pedido simples", False
+    return limits("medium", levels, c), "tarefa comum", False
 
 
+# ---------- juiz LLM (em segundo plano) ----------
 def judge(msg, current, levels, reply, ctx, c):
     agy = shutil.which("agy")
     if not agy:
         return None
-    schema = {"type": "object", "properties": {
-        "effort": {"type": "string", "enum": levels},
-        "confidence": {"type": "number"},
-        "reason": {"type": "string"},
-        "handoff": {"type": "boolean"}}, "required": ["effort", "confidence", "reason"]}
     prompt = (
-        "You pick the reasoning effort for a coding agent's next turn. Levels, cheapest first: "
+        "You pick the reasoning effort for a coding agent's turn. Levels, cheapest first: "
         f"{', '.join(levels)}. Current level: {current or 'unknown'}.\n"
         "Use the lowest level that will still do the job well: low for lookups, small edits, short answers and "
         "simple commands; medium for ordinary coding; high for debugging, multi-file changes, design and review; "
         "higher only for hard reasoning. A short reply that approves or continues a plan inherits the size of "
-        "the work it approves (read the previous answer). confidence is 0..1. reason: at most 8 words, same "
-        f"language as the user. handoff: true only if the new message starts an unrelated task and the context "
-        f"is above 30% (it is {ctx:.0f}%).\n\n"
-        f"Previous assistant answer (tail):\n<<<\n{reply[-1500:]}\n>>>\n\nUser message:\n<<<\n{msg[:2000]}\n>>>\n"
-        "Answer only with the JSON object.")
+        "the work it approves (read the previous answer). topic_change: true if the new message starts a task "
+        "unrelated to the previous answer.\n"
+        'Reply with ONE line of JSON and nothing else: {"effort": "<level>", "confidence": <0..1>, '
+        '"reason": "<at most 8 words, in the user\'s language>", "topic_change": <true|false>}\n\n'
+        f"Previous assistant answer (tail):\n<<<\n{reply[-1500:]}\n>>>\n\nUser message:\n<<<\n{msg[:2000]}\n>>>")
     try:
         r = subprocess.run([agy, "-p", prompt, "--model", c["judge_model"], "--output-format", "json",
-                            "--json-schema", json.dumps(schema), "--disable-slash-commands",
-                            "--print-timeout", f"{int(c['judge_timeout'])}s"],
-                           capture_output=True, text=True, timeout=int(c["judge_timeout"]) + 4, cwd=common.DATA,
+                            "--disable-slash-commands", "--print-timeout", f"{int(c['judge_timeout'])}s"],
+                           capture_output=True, text=True, timeout=int(c["judge_timeout"]) + 5, cwd=common.DATA,
                            env=dict(os.environ, AGY_TURBO_JUDGE="1", AGY_TREE="0", NO_COLOR="1"))
     except (OSError, subprocess.TimeoutExpired):
         return None
-    text = r.stdout
+    return parse_verdict(r.stdout, levels)
+
+
+def parse_verdict(stdout, levels):
+    """Aceita a saída JSON do `agy -p` (structured_output ou response) e pega o último objeto válido."""
+    texts = []
     try:
-        text = json.loads(text).get("response", text)
+        d = json.loads(stdout)
+        if isinstance(d.get("structured_output"), dict):
+            texts.append(json.dumps(d["structured_output"]))
+        texts.append(d.get("response") or "")
     except (ValueError, AttributeError):
-        pass
-    m = re.search(r"\{.*\}", text or "", re.S)
-    if not m:
-        return None
-    try:
-        v = json.loads(m.group(0))
-    except ValueError:
-        return None
-    if v.get("effort") not in levels:
-        return None
-    return v["effort"], float(v.get("confidence") or 0), "Flash: " + str(v.get("reason") or "")[:60], \
-        bool(v.get("handoff"))
+        texts.append(stdout or "")
+    for text in texts:
+        for m in reversed(list(re.finditer(r"\{[^{}]*\}", text))):
+            try:
+                v = json.loads(m.group(0))
+            except ValueError:
+                continue
+            if v.get("effort") in levels:
+                try:
+                    conf = float(v.get("confidence") if v.get("confidence") is not None else 0.7)
+                except (TypeError, ValueError):
+                    conf = 0.7
+                return v["effort"], conf, str(v.get("reason") or "")[:60], bool(v.get("topic_change"))
+    return None
 
 
-def decide(msg, current, levels, ev, c):
-    """(nível, motivo, fonte, handoff)."""
-    text = msg.strip()
-    low = text.lower()
-    for pat, lvl in EXPLICIT:
-        if re.search(pat, low):
-            return clamp(lvl, levels), "pedido explícito", "explicit", False
-    words = re.findall(r"[\wà-ú]+", low)
-    if current and words and len(words) <= 4 and all(w in CONTINUE for w in words):
-        return current, "continuação curta: mantém", "continue", False
-    handoff = False
-    v = None
-    if c["judge"] == "flash":
-        v = judge(text, current, levels, last_reply(ev.get("transcriptPath") or ""), context_pct(), c)
-    if v:
-        lvl, conf, why, handoff = v
-        source = "flash"
-    else:
-        lvl, conf, why = local_verdict(text, current)
-        source = "local"
-        if c["judge"] == "flash":
-            why += " (juiz sem resposta)"
-    if current and conf < 0.5:
-        return current, why + " · incerto: mantém", source, handoff
-    i = LEVELS.index(lvl)
-    bias = int(c.get("bias") or 0)
-    if bias and conf < (0.65 if abs(bias) == 1 else 0.85):
-        i += 1 if bias > 0 else -1
-    i = max(LEVELS.index(c["floor"]), min(LEVELS.index(c["ceiling"]), i))
-    if c.get("economy"):
-        i = min(i, LEVELS.index("medium"))
-    return clamp(LEVELS[max(0, min(i, len(LEVELS) - 1))], levels), why, source, handoff
+# ---------- tmux ----------
+def pane():
+    return os.environ.get("TMUX_PANE") if os.environ.get("TMUX") else None
 
 
-def tmux_type(pane, *items, delay=0.0):
+def tmux_type(target, *items, delay=0.0):
     """Digita no painel do agy num processo separado (o hook já pode ter retornado)."""
-    script = ["sleep", str(delay)] if delay else ["true"]
-    cmds = [" ".join(script)]
+    cmds = [f"sleep {float(delay)}"] if delay else ["true"]
+    q = shlex.quote(target)
     for kind, val in items:
         if kind == "keys":
-            cmds.append(f"tmux send-keys -t {shlex.quote(pane)} -l -- {shlex.quote(val)}")
-        elif kind == "altm":   # o agy põe a mensagem na fila enquanto encerra o turno; alt+m envia na hora
-            cmds.append(f"tmux send-keys -t {shlex.quote(pane)} M-m")
+            cmds.append(f"tmux send-keys -t {q} -l -- {shlex.quote(val)}")
         elif kind == "enter":
-            cmds.append(f"tmux send-keys -t {shlex.quote(pane)} Enter")
+            cmds.append(f"tmux send-keys -t {q} Enter")
+        elif kind == "altm":   # o agy põe a mensagem na fila enquanto encerra o turno; alt+m envia na hora
+            cmds.append(f"tmux send-keys -t {q} M-m")
         elif kind == "paste":
             cmds.append(f"printf %s {shlex.quote(val)} | tmux load-buffer -b agyturbo - && "
-                        f"tmux paste-buffer -p -d -b agyturbo -t {shlex.quote(pane)}")
+                        f"tmux paste-buffer -p -d -b agyturbo -t {q}")
         elif kind == "sleep":
             cmds.append(f"sleep {float(val)}")
     subprocess.Popen(["sh", "-c", " && ".join(cmds)], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
                      stderr=subprocess.DEVNULL, start_new_session=True)
 
 
+def set_effort(target, lvl, delay=0.0):
+    tmux_type(target, ("keys", f"/effort {lvl}"), ("enter", None), delay=delay)
+
+
+# ---------- hooks ----------
 def pre_invocation(ev):
     if ev.get("invocationNum") not in (0, None):
         return {}
@@ -219,54 +224,123 @@ def pre_invocation(ev):
     h = hashlib.sha1(msg.encode()).hexdigest()
     rs = state.get("resubmit") or {}
     if rs.get("hash") == h and time.time() - rs.get("t", 0) < 180:
-        state.pop("resubmit", None)          # é a mensagem que nós mesmos reenviamos: já está no nível certo
+        state.pop("resubmit", None)          # a mensagem que nós mesmos reenviamos: já está no nível certo
+        state.update({"turn": h, "turn_active": True})
         common.save("effortless.json", state)
         return {}
     if not c["auto"] or not msg.strip() or msg.lstrip().startswith("/") or not current:
         common.save("effortless.json", state)
         return {}
-    t0 = time.time()
-    lvl, why, source, handoff = decide(msg, current, levels, ev, c)
-    state.update({"decided": lvl, "reason": why, "source": source, "handoff": handoff,
-                  "judge_ms": int((time.time() - t0) * 1000), "t": time.time(), "pending": None})
-    pane = os.environ.get("TMUX_PANE") if os.environ.get("TMUX") else None
+    lvl, why, strong = local(msg, current, levels, c)
+    state.update({"decided": lvl, "reason": why, "source": "local", "t": time.time(), "pending": None,
+                  "turn": h, "turn_active": True, "judge": None, "raised_mid_turn": False})
+    if state.get("hint") == "handoff":
+        state["hint"] = None
+    target = pane()
     out = {}
     if lvl != current:
-        if not pane:
+        up = LEVELS.index(lvl) > LEVELS.index(current)
+        if not target:
             state["suggest"] = lvl
-        elif LEVELS.index(lvl) > LEVELS.index(current) and c["resubmit"]:
-            # subir vale já: troca o esforço e reenvia a mensagem; esta chamada é encerrada
+        elif up and strong and c["resubmit"]:
             state["resubmit"] = {"hash": h, "t": time.time(), "to": lvl}
             items = [("keys", f"/effort {lvl}"), ("enter", None), ("sleep", "0.4")]
             items += [("paste", msg)] if "\n" in msg else [("keys", msg)]
             items += [("sleep", "0.2"), ("enter", None), ("sleep", "0.6"), ("altm", None)]
-            tmux_type(pane, *items, delay=0.5)
+            tmux_type(target, *items, delay=0.5)
+            state["turn_active"] = False
             out = {"terminationBehavior": "terminate"}
-        elif LEVELS.index(lvl) > LEVELS.index(current):
-            tmux_type(pane, ("keys", f"/effort {lvl}"), ("enter", None))
-        else:
+        elif not up:
             state["pending"] = lvl            # descer só no fim do turno
-        if pane:
+        if target:
             state.pop("suggest", None)
     else:
         state.pop("suggest", None)
     common.save("effortless.json", state)
+    # juiz em segundo plano: não segura a mensagem (e não roda quando já vamos reenviar)
+    if not out and c["judge"] == "flash" and not strong:
+        common.save("judge-job.json", {"msg": msg, "current": current, "levels": levels, "turn": h,
+                                       "transcript": ev.get("transcriptPath") or "", "pane": target})
+        subprocess.Popen([sys.executable, "-I", os.path.abspath(__file__), "--judge"], stdin=subprocess.DEVNULL,
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True,
+                         env=dict(os.environ, AGY_TURBO_DATA=common.DATA))
     return out
 
 
-def stop(ev):
+def run_judge():
+    job = common.load("judge-job.json")
+    if not job:
+        return
+    c = cfg()
+    t0 = time.time()
+    v = judge(job["msg"], job["current"], job["levels"], last_reply(job["transcript"]), context_pct(), c)
     state = common.load("effortless.json")
-    lvl = state.get("pending")
-    pane = os.environ.get("TMUX_PANE") if os.environ.get("TMUX") else None
-    if lvl and pane and ev.get("terminationReason") != "TERMINAL_CUSTOM_HOOK":
-        tmux_type(pane, ("keys", f"/effort {lvl}"), ("enter", None), delay=0.3)
-        state["pending"] = None
-        state["current"] = lvl
+    if state.get("turn") != job["turn"]:
+        return                                # já chegou outra mensagem: veredito velho
+    ms = int((time.time() - t0) * 1000)
+    if not v:
+        state["judge"] = {"ok": False, "ms": ms}
         common.save("effortless.json", state)
+        return
+    lvl, conf, why, topic = v
+    lvl = limits(lvl, job["levels"], c, conf)
+    cur = state.get("current") or job["current"]
+    state["judge"] = {"ok": True, "ms": ms, "effort": lvl, "conf": conf, "reason": why}
+    state.update({"decided": lvl, "reason": why, "source": "flash"})
+    if topic and context_pct() >= c["handoff_at"] and c["handoff"] != "off":
+        state["hint"] = "handoff"
+    if conf >= 0.5 and cur and lvl != cur:
+        if LEVELS.index(lvl) > LEVELS.index(cur):
+            state["pending"] = None
+            if state.get("turn_active") and job.get("pane"):
+                set_effort(job["pane"], lvl)  # o turno ainda roda: as próximas chamadas já sobem
+                state["current"] = lvl
+                state["raised_mid_turn"] = True
+            elif not job.get("pane"):
+                state["suggest"] = lvl
+        else:
+            state["pending"] = lvl
+    elif cur and lvl == cur:
+        state["pending"] = None
+    common.save("effortless.json", state)
+
+
+def stop(ev):
+    if ev.get("terminationReason") == "TERMINAL_CUSTOM_HOOK":
+        return {}                              # é o nosso reenvio
+    c = cfg()
+    state = common.load("effortless.json")
+    state["turn_active"] = False
+    target = pane()
+    items = []
+    lvl = state.get("pending")
+    if lvl and target:
+        items += [("keys", f"/effort {lvl}"), ("enter", None), ("sleep", "0.5")]
+        state["current"], state["pending"] = lvl, None
+    ctx = context_pct()
+    if ctx >= c["compact_at"]:
+        if c["compact"] == "auto" and target and time.time() - state.get("compact_t", 0) > 300:
+            items += [("keys", "/compact"), ("enter", None)]
+            state["compact_t"] = time.time()
+            state["hint"] = "compacting"
+        elif c["compact"] != "off":
+            state["hint"] = "compact"
+    elif state.get("hint") == "handoff" and c["handoff"] == "auto" and target \
+            and time.time() - state.get("handoff_t", 0) > 600:
+        items += [("keys", "/handoff"), ("enter", None)]
+        state["handoff_t"] = time.time()
+    elif state.get("hint") in ("compacting", "compact"):
+        state["hint"] = None
+    if items:
+        tmux_type(target, *items, delay=0.3)
+    common.save("effortless.json", state)
     return {}
 
 
 def main():
+    if "--judge" in sys.argv:
+        run_judge()
+        return None
     raw = sys.stdin.read()
     if common.nested_judge():
         return {}
@@ -284,6 +358,9 @@ def main():
 
 if __name__ == "__main__":
     try:
-        print(json.dumps(main()))
+        out = main()
+        if out is not None:
+            print(json.dumps(out))
     except Exception:
-        print("{}")
+        if "--judge" not in sys.argv:
+            print("{}")
